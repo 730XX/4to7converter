@@ -1,0 +1,104 @@
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+
+/**
+ * Indica si la app corre dentro del shell de Tauri (escritorio). En el
+ * navegador no existe el runtime interno de Tauri.
+ *
+ * @returns true cuando la app se ejecuta como app de escritorio Tauri.
+ */
+export function isTauri(): boolean {
+  return "__TAURI_INTERNALS__" in window;
+}
+
+/** Resultado de cargar un beatmap junto con su ruta de audio e imagen de fondo resueltas. */
+export interface BeatmapLoadResult {
+  content: string;
+  audioPath: string | null;
+  backgroundPath: string | null;
+}
+
+/**
+ * Carga un archivo .osu desde una ruta absoluta del disco. El comando nativo
+ * devuelve el contenido del beatmap, la ruta absoluta del audio referenciado
+ * por `AudioFilename` y la imagen de fondo en `[Events]`.
+ *
+ * @param path - Ruta absoluta del archivo .osu.
+ * @returns El contenido del beatmap, ruta de audio y ruta de fondo.
+ */
+export async function loadBeatmapWithAudio(path: string): Promise<BeatmapLoadResult> {
+  const result = await invoke<{
+    content: string;
+    audio_path: string | null;
+    background_path: string | null;
+  }>("load_beatmap", {
+    path,
+  });
+  return {
+    content: result.content,
+    audioPath: result.audio_path,
+    backgroundPath: result.background_path,
+  };
+}
+
+/**
+ * Guarda el archivo de beatmap en disco si estamos en entorno de escritorio Tauri.
+ */
+export async function saveBeatmap(path: string, content: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("No estás en la aplicación de escritorio");
+  }
+  await invoke("save_beatmap", { path, content });
+}
+
+/**
+ * Convierte una ruta absoluta de archivo del sistema operativo a una URL con el
+ * protocolo `asset://` que Tauri puede cargar de forma segura en el WebView.
+ *
+ * Devuelve la misma ruta sin cambios si no está corriendo dentro de Tauri.
+ *
+ * @param filePath - Ruta absoluta del archivo local.
+ * @returns La URL del asset para audio o imagen.
+ */
+export function toAssetUrl(filePath: string): string {
+  return convertFileSrc(filePath);
+}
+
+import { appLogger } from "./logger";
+
+export const toAudioUrl = toAssetUrl;
+
+/** Datos del beatmap detectado desde el proceso de osu!. */
+export interface OsuDetectedBeatmap {
+  path: string;
+  folder_name: string;
+  file_name: string;
+  title: string | null;
+  artist: string | null;
+  version: string | null;
+}
+
+export interface OsuDetectResponse {
+  map: OsuDetectedBeatmap | null;
+  logs: string[];
+}
+
+/**
+ * Consulta a Rust para detectar el mapa actualmente seleccionado en osu!.
+ * Registra automáticamente los logs de diagnóstico en la consola in-app.
+ */
+export async function detectOsuBeatmap(): Promise<OsuDetectedBeatmap | null> {
+  if (!isTauri()) {
+    appLogger.add("warn", "detectOsuBeatmap: No estamos en entorno Tauri Desktop", "Native");
+    return null;
+  }
+  try {
+    const res = await invoke<OsuDetectResponse>("detect_osu_map");
+    if (res && res.logs && res.logs.length > 0) {
+      appLogger.addRustLogs(res.logs);
+    }
+    return res ? res.map : null;
+  } catch (error) {
+    appLogger.add("error", `Fallo al invocar detect_osu_map: ${String(error)}`, "Native");
+    return null;
+  }
+}

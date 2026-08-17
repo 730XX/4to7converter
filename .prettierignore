@@ -1,0 +1,6 @@
+.atl/
+dist/
+node_modules/
+app/dist/
+app/node_modules/
+app/src-tauri/

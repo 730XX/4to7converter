@@ -1,0 +1,31 @@
+{
+  "name": "osu-4to7-converter",
+  "version": "0.1.0",
+  "description": "Desktop tool to convert osu!mania 4k beatmaps to 7k with a visual lane-mapping editor.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:app": "npm --prefix app run build",
+    "dev:app": "npm --prefix app run dev",
+    "tauri:dev": "npm --prefix app run tauri dev",
+    "tauri:build": "npm --prefix app run tauri build",
+    "convert": "tsx src/cli/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  }
+}

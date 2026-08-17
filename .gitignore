@@ -1,0 +1,10 @@
+.atl/
+node_modules/
+dist/
+app/dist/
+app/node_modules/
+app/src-tauri/target/
+**/bin/
+**/obj/
+.vs/
+*.local

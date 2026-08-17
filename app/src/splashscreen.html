@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+<link href="splashscreen.css" rel="stylesheet" />   
+
+</head>
+<body>
+    <script>
+          window.addEventListener("DOMContentLoaded", async () => {
+    await new Promise(r => setTimeout(r, 6000));
+    try {
+      const invoke = window.__TAURI__.core.invoke;
+      await invoke("splash_screen");
+    } catch (e) {
+      console.error("Failed to finish splash:", e);
+    }
+  });
+
+    </script>
+</body>
+</html>
