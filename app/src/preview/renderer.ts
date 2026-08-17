@@ -183,7 +183,7 @@ function drawLanes(
 function drawHitLine(
   ctx: CanvasRenderingContext2D,
   width: number,
-  height: number,
+  _height: number,
   hitLineY: number,
   keyCount: number,
   hitObjects: HitObject[],
@@ -198,7 +198,6 @@ function drawHitLine(
   if (hitGlow) {
     const ATTACK_MS = 50; // Entrada suave (fade-in)
     const DECAY_MS = 250; // Salida progresiva suave (fade-out)
-    const TOTAL_WINDOW_MS = ATTACK_MS + DECAY_MS;
     const BEAM_HEIGHT = 90;
 
     for (const ho of hitObjects) {

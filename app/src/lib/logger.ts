@@ -69,6 +69,22 @@ class AppLogger {
     this.notify();
   }
 
+  public info(message: string, source: string = "App"): void {
+    this.add("info", message, source);
+  }
+
+  public warn(message: string, source: string = "App"): void {
+    this.add("warn", message, source);
+  }
+
+  public error(message: string, source: string = "App"): void {
+    this.add("error", message, source);
+  }
+
+  public debug(message: string, source: string = "App"): void {
+    this.add("debug", message, source);
+  }
+
   public addRustLogs(rustLogs: string[]): void {
     for (const log of rustLogs) {
       let level: LogLevel = "rust";

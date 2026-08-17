@@ -27,14 +27,16 @@ export function generateRandomLaneMapState(
   sourceKeyCount: number = 4,
   targetKeyCount: number = 7,
 ): LaneMapState {
-  // Arreglo con todos los índices de destino [0, 1, 2, 3, 4, 5, 6]
-  const targetPool = Array.from({ length: targetKeyCount }, (_, i) => i);
+  const targetPool: number[] = Array.from({ length: targetKeyCount }, (_, i) => i);
   // Barajar usando Fisher-Yates
   for (let i = targetPool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const temp = targetPool[i];
-    targetPool[i] = targetPool[j];
-    targetPool[j] = temp;
+    const tempI = targetPool[i];
+    const tempJ = targetPool[j];
+    if (tempI !== undefined && tempJ !== undefined) {
+      targetPool[i] = tempJ;
+      targetPool[j] = tempI;
+    }
   }
 
   const result: number[][] = Array.from({ length: sourceKeyCount }, () => []);
@@ -42,8 +44,9 @@ export function generateRandomLaneMapState(
   // Paso 1: Asegurar que cada carril fuente tenga al menos 1 destino
   for (let s = 0; s < sourceKeyCount; s++) {
     const target = targetPool.pop();
-    if (target !== undefined) {
-      result[s].push(target);
+    const row = result[s];
+    if (target !== undefined && row !== undefined) {
+      row.push(target);
     }
   }
 
@@ -52,7 +55,10 @@ export function generateRandomLaneMapState(
     const target = targetPool.pop();
     if (target !== undefined) {
       const randomSource = Math.floor(Math.random() * sourceKeyCount);
-      result[randomSource].push(target);
+      const row = result[randomSource];
+      if (row !== undefined) {
+        row.push(target);
+      }
     }
   }
 

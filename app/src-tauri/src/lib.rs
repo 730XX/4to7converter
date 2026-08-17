@@ -167,6 +167,19 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1600));
+                if let Some(splash) = handle.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                }
+                if let Some(main) = handle.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![splash_screen, load_beatmap, detect_osu_map, save_beatmap])

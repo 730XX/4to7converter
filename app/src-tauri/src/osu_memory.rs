@@ -339,10 +339,26 @@ pub mod windows_scanner {
         
         let current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         
-        // Dependiendo de si se lanza desde "app" o "app/src-tauri"
+        // Dependiendo de si se lanza en dev ("app" o "app/src-tauri") o producción instalada
         let mut exe_path = current.join("src-tauri").join("osu-detector").join("bin").join("Release").join("net9.0").join("win-x86").join("osu-detector.exe");
         if !exe_path.exists() {
             exe_path = current.join("osu-detector").join("bin").join("Release").join("net9.0").join("win-x86").join("osu-detector.exe");
+        }
+        if !exe_path.exists() {
+            if let Ok(curr_exe) = std::env::current_exe() {
+                if let Some(parent) = curr_exe.parent() {
+                    let p1 = parent.join("osu-detector.exe");
+                    let p2 = parent.join("resources").join("osu-detector.exe");
+                    let p3 = parent.join("_up_").join("osu-detector").join("bin").join("Release").join("net9.0").join("win-x86").join("osu-detector.exe");
+                    if p1.exists() {
+                        exe_path = p1;
+                    } else if p2.exists() {
+                        exe_path = p2;
+                    } else if p3.exists() {
+                        exe_path = p3;
+                    }
+                }
+            }
         }
 
         if !exe_path.exists() {

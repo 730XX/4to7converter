@@ -93,7 +93,7 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
         <div className="osd-content">
           <div className="osd-label-row">
             <span className="osd-title">Música</span>
-            <span className="osd-value mono">{Math.round(osd.volume)}%</span>
+            <span className="osd-value mono">{Math.round(osd.volume ?? 0)}%</span>
           </div>
           <div className="osd-bar-track">
             <div className="osd-bar-fill" style={{ width: `${musicPct}%` }} />
@@ -111,7 +111,7 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
         <div className="osd-content">
           <div className="osd-label-row">
             <span className="osd-title">Hitsound</span>
-            <span className="osd-value mono">{Math.round(osd.hitsoundVolume)}%</span>
+            <span className="osd-value mono">{Math.round(osd.hitsoundVolume ?? 0)}%</span>
           </div>
           <div className="osd-bar-track">
             <div className="osd-bar-fill osd-bar-fill--hitsound" style={{ width: `${hitPct}%` }} />
