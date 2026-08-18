@@ -22,7 +22,7 @@ export function parseOsuFile(content: string): OsuBeatmap {
   if (!content || content.trim().length === 0) {
     throw new OsuParseError(
       OsuParseErrorCode.EmptyContent,
-      "The file is empty. Load a valid .osu beatmap.",
+      "El archivo está vacío. Carga un beatmap .osu válido.",
     );
   }
 
@@ -36,7 +36,7 @@ export function parseOsuFile(content: string): OsuBeatmap {
   if (mode !== 3) {
     throw new OsuParseError(
       OsuParseErrorCode.UnsupportedMode,
-      `This is not an osu!mania beatmap (Mode ${mode}). Only Mode 3 is supported.`,
+      `Este no es un beatmap de osu!mania (Mode ${mode}). Solo se admite el Mode 3.`,
     );
   }
 
@@ -93,7 +93,7 @@ function parseFormatVersion(firstLine: string): number {
   if (match === null) {
     throw new OsuParseError(
       OsuParseErrorCode.InvalidFormatVersion,
-      "The file does not start with a valid 'osu file format vN' header.",
+      "El archivo no comienza con un encabezado 'osu file format vN' válido.",
     );
   }
   return Number.parseInt(match[1]!, 10);
@@ -199,7 +199,7 @@ function parseKeyCount(difficultyLines: string[]): number {
   if (!Number.isInteger(rawKeyCount) || rawKeyCount < 1) {
     throw new OsuParseError(
       OsuParseErrorCode.MissingKeyCount,
-      "The beatmap has no valid CircleSize (key count).",
+      "El beatmap no tiene un CircleSize (cantidad de teclas) válido.",
     );
   }
   return rawKeyCount;
@@ -233,7 +233,7 @@ function parseTimingPointLine(line: string): TimingPoint {
   if (Number.isNaN(offsetMs) || Number.isNaN(beatLength) || !Number.isFinite(beatLength)) {
     throw new OsuParseError(
       OsuParseErrorCode.InvalidTimingPoint,
-      `Invalid timing point: "${line}".`,
+      `Punto de timing inválido: "${line}".`,
     );
   }
 
@@ -270,7 +270,7 @@ function parseHitObjectLine(line: string, keyCount: number): HitObject {
   const rawType = parseIntOrThrow(fields[3] ?? "", line);
 
   if (Number.isNaN(x) || Number.isNaN(timeMs)) {
-    throw new OsuParseError(OsuParseErrorCode.InvalidHitObject, `Invalid hit object: "${line}".`);
+    throw new OsuParseError(OsuParseErrorCode.InvalidHitObject, `Hit object inválido: "${line}".`);
   }
 
   const type = resolveHitObjectType(rawType, line);
@@ -282,7 +282,7 @@ function parseHitObjectLine(line: string, keyCount: number): HitObject {
     type,
     endTimeMs,
     hitSound: parseIntOrThrow(fields[4] ?? "0", line),
-    hitSample: fields[6] ?? "0:0:0:0:",
+    hitSample: parseHitSample(fields[5], fields[6], type === HIT_TYPE_HOLD),
   };
 }
 
@@ -304,7 +304,7 @@ function resolveHitObjectType(rawType: number, line: string): HitObjectType {
   if (hasSliderBit || hasSpinnerBit) {
     throw new OsuParseError(
       OsuParseErrorCode.InvalidHitObject,
-      `Unsupported hit object type ${rawType}: "${line}". Sliders and spinners do not exist in osu!mania.`,
+      `Tipo de hit object no soportado (${rawType}): "${line}". Los sliders y spinners no existen en osu!mania.`,
     );
   }
   if ((rawType & HIT_TYPE_HOLD) !== 0) {
@@ -315,7 +315,7 @@ function resolveHitObjectType(rawType: number, line: string): HitObjectType {
   }
   throw new OsuParseError(
     OsuParseErrorCode.InvalidHitObject,
-    `Unsupported hit object type ${rawType}: "${line}". Only circles and holds are valid in osu!mania.`,
+    `Tipo de hit object no soportado (${rawType}): "${line}". Solo los círculos y holds son válidos en osu!mania.`,
   );
 }
 
@@ -325,10 +325,41 @@ function parseHoldEndTime(payload: string | undefined, line: string): number {
   if (Number.isNaN(endTimeMs)) {
     throw new OsuParseError(
       OsuParseErrorCode.InvalidHitObject,
-      `Hold note without a valid end time: "${line}".`,
+      `Hold note sin un tiempo de fin válido: "${line}".`,
     );
   }
   return endTimeMs;
+}
+
+/**
+ * Extrae el hitSample de una línea de hit object, soportando las dos variantes
+ * del formato: la forma de mania de 6 campos (círculos con el sample en el
+ * campo de objectParams, holds con "endTime:hitSample") y la forma general de
+ * 7 campos con un campo explícito separado. Devuelve el valor por defecto
+ * cuando no hay un sample válido.
+ *
+ * @param objectParamsField - El campo de object params (o sample, en mania).
+ * @param explicitSampleField - El campo de hitSample explícito, si existe.
+ * @param isHold - true para hold notes, cuyo sample vive tras el "endTime:".
+ * @returns El hitSample preservado, o "0:0:0:0:" cuando no existe.
+ */
+function parseHitSample(
+  objectParamsField: string | undefined,
+  explicitSampleField: string | undefined,
+  isHold: boolean,
+): string {
+  const fallback = "0:0:0:0:";
+  if (explicitSampleField !== undefined && explicitSampleField.trim().length > 0) {
+    return explicitSampleField;
+  }
+  if (objectParamsField === undefined || objectParamsField.trim().length === 0) {
+    return fallback;
+  }
+  if (!isHold) {
+    return objectParamsField;
+  }
+  const separatorIndex = objectParamsField.indexOf(":");
+  return separatorIndex < 0 ? fallback : objectParamsField.slice(separatorIndex + 1);
 }
 
 /** Parsea un campo numérico opcional, usando el valor por defecto dado como respaldo. */
@@ -346,7 +377,7 @@ function parseIntOrThrow(rawField: string, line: string): number {
   if (Number.isNaN(parsedValue)) {
     throw new OsuParseError(
       OsuParseErrorCode.InvalidHitObject,
-      `Invalid numeric field in hit object: "${line}".`,
+      `Campo numérico inválido en el hit object: "${line}".`,
     );
   }
   return parsedValue;

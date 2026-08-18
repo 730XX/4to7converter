@@ -85,7 +85,16 @@ export function buildLaneSkins(keyCount: number): LaneSkinColor[] {
     return [WHITE_SKIN, PINK_SKIN, BLUE_SKIN, BLUE_SKIN, PINK_SKIN, WHITE_SKIN];
   }
   if (keyCount === 8) {
-    return [WHITE_SKIN, PINK_SKIN, WHITE_SKIN, YELLOW_SKIN, YELLOW_SKIN, WHITE_SKIN, PINK_SKIN, WHITE_SKIN];
+    return [
+      WHITE_SKIN,
+      PINK_SKIN,
+      WHITE_SKIN,
+      YELLOW_SKIN,
+      YELLOW_SKIN,
+      WHITE_SKIN,
+      PINK_SKIN,
+      WHITE_SKIN,
+    ];
   }
   return Array.from({ length: keyCount }, (_, i) => (i % 2 === 0 ? WHITE_SKIN : PINK_SKIN));
 }
@@ -119,9 +128,7 @@ export function drawPlayfieldFrame(
   hitGlow: boolean = true,
 ): void {
   const hitLineY =
-    scrollDirection === "down"
-      ? height - PLAYFIELD_HIT_LINE_OFFSET
-      : PLAYFIELD_HIT_LINE_OFFSET;
+    scrollDirection === "down" ? height - PLAYFIELD_HIT_LINE_OFFSET : PLAYFIELD_HIT_LINE_OFFSET;
 
   const metrics: PlayfieldMetrics = {
     width,
@@ -202,9 +209,7 @@ function drawHitLine(
 
     for (const ho of hitObjects) {
       const isHoldActive =
-        ho.endTimeMs !== null &&
-        currentTimeMs >= ho.timeMs &&
-        currentTimeMs <= ho.endTimeMs;
+        ho.endTimeMs !== null && currentTimeMs >= ho.timeMs && currentTimeMs <= ho.endTimeMs;
 
       // Evaluamos notas desde un poco antes de la línea para entrada anticipada suave
       const timeDiff = currentTimeMs - ho.timeMs;
@@ -216,7 +221,7 @@ function drawHitLine(
         const actualWidth = Math.round((col + 1) * columnWidth) - colX;
         const skin = palette.laneSkins[col] ?? WHITE_SKIN;
 
-        let intensity = 0;
+        let intensity: number;
         if (isHoldActive) {
           // Durante la hold note se mantiene estable con brillo pulsante suave
           intensity = 0.55;

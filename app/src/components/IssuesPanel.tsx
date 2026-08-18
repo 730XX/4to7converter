@@ -12,12 +12,19 @@ export function IssuesPanel({ issues }: IssuesPanelProps) {
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.filter((issue) => issue.severity === "warning");
 
+  if (issues.length === 0) {
+    return null;
+  }
+
   return (
     <section className="issues-panel">
       <h2>Problemas detectados</h2>
       {issues.length === 0 ? (
         <p className="issues-empty">
-          <CheckCircle2 size={16} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 6 }} />
+          <CheckCircle2
+            size={16}
+            style={{ display: "inline-block", verticalAlign: "middle", marginRight: 6 }}
+          />
           Sin problemas detectados en la conversión.
         </p>
       ) : (
@@ -45,9 +52,15 @@ function IssueRow({ issue }: IssueRowProps) {
     <li className={`issue-row issue-row--${isError ? "error" : "warning"}`}>
       <span className="issue-severity">
         {isError ? (
-          <AlertCircle size={13} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+          <AlertCircle
+            size={13}
+            style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }}
+          />
         ) : (
-          <AlertTriangle size={13} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+          <AlertTriangle
+            size={13}
+            style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }}
+          />
         )}
         {isError ? "Error" : "Advertencia"}
       </span>

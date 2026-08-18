@@ -8,7 +8,7 @@ import {
   Sparkles,
   ArrowDownUp,
   LayoutGrid,
-  FileText
+  FileText,
 } from "lucide-react";
 import type { UserSettings } from "../lib/settings";
 
@@ -53,7 +53,10 @@ export function SettingsDrawer({
         aria-hidden="true"
       />
 
-      <aside className={`settings-drawer${isOpen ? " is-open" : ""}`} aria-label="Ajustes de la aplicación">
+      <aside
+        className={`settings-drawer${isOpen ? " is-open" : ""}`}
+        aria-label="Ajustes de la aplicación"
+      >
         {/* Cabecera del Drawer */}
         <header className="settings-header">
           <div className="settings-header-title">
@@ -183,7 +186,6 @@ export function SettingsDrawer({
                 <span className="settings-item-label">Modo de Vista Previa</span>
               </div>
               <div className="settings-segmented-control">
-                
                 <button
                   type="button"
                   className={`segmented-btn${previewMode === "7k" ? " is-active" : ""}`}
@@ -191,7 +193,7 @@ export function SettingsDrawer({
                 >
                   <span>7K Convertido</span>
                 </button>
-                
+
                 <button
                   type="button"
                   className={`segmented-btn${previewMode === "4k" ? " is-active" : ""}`}

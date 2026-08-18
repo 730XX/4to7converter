@@ -9,6 +9,8 @@ export const ConversionErrorCode = {
   TargetColumnOutOfRange: 2002,
   /** La columna destino se repite dentro de la misma columna fuente. */
   DuplicateTargetColumn: 2003,
+  /** El beatmap fuente tiene más columnas de las que cubre el lane map. */
+  SourceKeyCountMismatch: 2004,
 } as const;
 
 /**

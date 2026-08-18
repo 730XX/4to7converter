@@ -60,14 +60,14 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     if (argument.startsWith("-")) {
       throw new CliError(
         CliErrorCode.UsageError,
-        `Unknown option "${argument}". Run with --help to see the usage.`,
+        `Opción desconocida "${argument}". Ejecuta con --help para ver el uso.`,
       );
     }
 
     if (inputPath !== null) {
       throw new CliError(
         CliErrorCode.UsageError,
-        `Unexpected extra argument "${argument}". Run with --help to see the usage.`,
+        `Argumento extra inesperado: "${argument}". Ejecuta con --help para ver el uso.`,
       );
     }
     inputPath = argument;
@@ -76,7 +76,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
   if (inputPath === null && !showHelp) {
     throw new CliError(
       CliErrorCode.UsageError,
-      "Missing input .osu file. Run with --help to see the usage.",
+      "Falta el archivo .osu de entrada. Ejecuta con --help para ver el uso.",
     );
   }
 
@@ -87,7 +87,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
 function readValueArgument(argv: readonly string[], index: number, option: string): string {
   const value = argv[index + 1];
   if (value === undefined || value.startsWith("-")) {
-    throw new CliError(CliErrorCode.UsageError, `Option "${option}" requires a value.`);
+    throw new CliError(CliErrorCode.UsageError, `La opción "${option}" requiere un valor.`);
   }
   return value;
 }
@@ -98,7 +98,7 @@ function parseKeyCount(rawValue: string): number {
   if (!Number.isInteger(parsedValue) || parsedValue < 1) {
     throw new CliError(
       CliErrorCode.UsageError,
-      `Invalid key count "${rawValue}". Use a positive integer, e.g. 7.`,
+      `Cantidad de teclas inválida: "${rawValue}". Usa un entero positivo, p. ej. 7.`,
     );
   }
   return parsedValue;

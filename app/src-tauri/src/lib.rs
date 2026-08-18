@@ -150,9 +150,126 @@ async fn detect_osu_map() -> Result<OsuDetectResponse, String> {
     {
         Ok(OsuDetectResponse {
             map: None,
-            logs: vec!["⚠️ Plataforma no es Windows".into()],
+            logs: vec!["[AVISO] Plataforma no es Windows".into()],
         })
     }
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct BeatmapDiffItem {
+    pub path: String,
+    pub file_name: String,
+    pub version: String,
+    pub mode: u8,
+    pub key_count: u8,
+}
+
+fn find_metadata_field(content: &str, field: &str) -> Option<String> {
+    let mut in_metadata = false;
+    let prefix = format!("{}:", field);
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_metadata = trimmed.eq_ignore_ascii_case("[Metadata]");
+            continue;
+        }
+        if !in_metadata {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let val = rest.trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn find_general_field(content: &str, field: &str) -> Option<String> {
+    let mut in_general = false;
+    let prefix = format!("{}:", field);
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_general = trimmed.eq_ignore_ascii_case("[General]");
+            continue;
+        }
+        if !in_general {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let val = rest.trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn find_difficulty_field(content: &str, field: &str) -> Option<String> {
+    let mut in_difficulty = false;
+    let prefix = format!("{}:", field);
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_difficulty = trimmed.eq_ignore_ascii_case("[Difficulty]");
+            continue;
+        }
+        if !in_difficulty {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let val = rest.trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn list_beatmap_difficulties(path: String) -> Result<Vec<BeatmapDiffItem>, String> {
+    let p = Path::new(&path);
+    let parent = p.parent().ok_or_else(|| "No se pudo obtener el directorio del archivo".to_string())?;
+    let mut diffs = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file() {
+                if let Some(ext) = entry_path.extension() {
+                    if ext.eq_ignore_ascii_case("osu") {
+                        if let Ok(content) = std::fs::read_to_string(&entry_path) {
+                            let version = find_metadata_field(&content, "Version")
+                                .unwrap_or_else(|| {
+                                    entry_path.file_stem()
+                                        .map(|s| s.to_string_lossy().into_owned())
+                                        .unwrap_or_else(|| "Unknown".to_string())
+                                });
+                            let mode_str = find_general_field(&content, "Mode").unwrap_or_default();
+                            let mode: u8 = mode_str.parse().unwrap_or(0);
+                            let cs_str = find_difficulty_field(&content, "CircleSize").unwrap_or_default();
+                            let key_count: u8 = cs_str.parse().unwrap_or(4);
+
+                            diffs.push(BeatmapDiffItem {
+                                path: entry_path.to_string_lossy().into_owned(),
+                                file_name: entry.file_name().to_string_lossy().into_owned(),
+                                version,
+                                mode,
+                                key_count,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    diffs.sort_by(|a, b| a.version.to_lowercase().cmp(&b.version.to_lowercase()));
+    Ok(diffs)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -182,7 +299,13 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![splash_screen, load_beatmap, detect_osu_map, save_beatmap])
+        .invoke_handler(tauri::generate_handler![
+            splash_screen,
+            load_beatmap,
+            detect_osu_map,
+            save_beatmap,
+            list_beatmap_difficulties
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

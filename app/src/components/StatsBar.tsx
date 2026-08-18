@@ -15,8 +15,8 @@ export function StatsBar({ source, converted, targetColumnCounts, issueCounts }:
   const maxTargetCount = Math.max(...targetColumnCounts, 1);
 
   return (
-    <section className="stats-bar">
-      <div className="stat-card">
+    <section className="stats-bar" style={{ alignItems: "center", textAlign: "center" }}>
+      <div className="stat-card" >
         <span className="stat-label">Notas fuente</span>
         <span className="stat-value mono">{source.hitObjects.length}</span>
       </div>
@@ -36,6 +36,7 @@ export function StatsBar({ source, converted, targetColumnCounts, issueCounts }:
           {issueCounts.warnings}
         </span>
       </div>
+      {/* 
       <div className="stat-card stat-card--columns">
         <span className="stat-label">Notas por columna destino</span>
         <div
@@ -54,7 +55,7 @@ export function StatsBar({ source, converted, targetColumnCounts, issueCounts }:
             </div>
           ))}
         </div>
-      </div>
+      </div> */}
     </section>
   );
 }

@@ -88,11 +88,11 @@ class AppLogger {
   public addRustLogs(rustLogs: string[]): void {
     for (const log of rustLogs) {
       let level: LogLevel = "rust";
-      if (log.includes("❌") || log.includes("Error") || log.includes("falló")) {
+      if (log.includes("[ERROR]") || log.includes("Error") || log.includes("falló")) {
         level = "error";
-      } else if (log.includes("⚠️")) {
+      } else if (log.includes("[AVISO]")) {
         level = "warn";
-      } else if (log.includes("✅") || log.includes("🎉")) {
+      } else if (log.includes("[OK]")) {
         level = "info";
       }
       this.add(level, log, "Rust");

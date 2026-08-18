@@ -82,13 +82,13 @@ export function parseLaneMapJson(rawJson: string): LaneMap {
   try {
     parsedValue = JSON.parse(rawJson);
   } catch {
-    throw new CliError(CliErrorCode.InvalidLaneMap, "The lane map is not valid JSON.");
+    throw new CliError(CliErrorCode.InvalidLaneMap, "El lane map no es JSON válido.");
   }
 
   if (!Array.isArray(parsedValue) || parsedValue.length === 0) {
     throw new CliError(
       CliErrorCode.InvalidLaneMap,
-      "The lane map must be a non-empty JSON array of arrays, e.g. [[0,1],[2,3],[4],[5,6]].",
+      "El lane map debe ser un arreglo JSON de arreglos no vacío, p. ej. [[0,1],[2,3],[4],[5,6]].",
     );
   }
 
@@ -96,14 +96,14 @@ export function parseLaneMapJson(rawJson: string): LaneMap {
     if (!Array.isArray(sourceEntry) || sourceEntry.length === 0) {
       throw new CliError(
         CliErrorCode.InvalidLaneMap,
-        `Source column ${sourceColumn} must be a non-empty array of target columns.`,
+        `La columna fuente ${sourceColumn} debe ser un arreglo no vacío de columnas destino.`,
       );
     }
     return sourceEntry.map((targetColumn) => {
       if (!Number.isInteger(targetColumn) || targetColumn < 0) {
         throw new CliError(
           CliErrorCode.InvalidLaneMap,
-          `Source column ${sourceColumn} contains an invalid target column "${String(targetColumn)}".`,
+          `La columna fuente ${sourceColumn} contiene una columna destino inválida: "${String(targetColumn)}".`,
         );
       }
       return targetColumn;
@@ -118,7 +118,10 @@ async function readInputFile(inputPath: string): Promise<string> {
   try {
     return await readFile(inputPath, "utf8");
   } catch {
-    throw new CliError(CliErrorCode.FileReadError, `Cannot read input file "${inputPath}".`);
+    throw new CliError(
+      CliErrorCode.FileReadError,
+      `No se puede leer el archivo de entrada "${inputPath}".`,
+    );
   }
 }
 
@@ -127,7 +130,10 @@ async function writeOutputFile(outputPath: string, content: string): Promise<voi
   try {
     await writeFile(outputPath, content, "utf8");
   } catch {
-    throw new CliError(CliErrorCode.FileWriteError, `Cannot write output file "${outputPath}".`);
+    throw new CliError(
+      CliErrorCode.FileWriteError,
+      `No se puede escribir el archivo de salida "${outputPath}".`,
+    );
   }
 }
 
@@ -143,7 +149,7 @@ function createDefaultLaneMap(targetKeyCount: number): LaneMap {
   if (targetKeyCount !== 7) {
     throw new CliError(
       CliErrorCode.InvalidKeys,
-      `A lane map is required when the target key count is not 7 (got ${targetKeyCount}).`,
+      `Se requiere un lane map cuando la cantidad de teclas destino no es 7 (se recibió ${targetKeyCount}).`,
     );
   }
   return { sourceColumnToTargetColumns: DEFAULT_4K_TO_7K_LANE_MAP };

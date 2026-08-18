@@ -29,7 +29,10 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
         <div className="osd-icon" style={{ color: "var(--color-success, #22c55e)" }}>
           <CheckCircle2 size={18} />
         </div>
-        <div className="osd-content" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div
+          className="osd-content"
+          style={{ display: "flex", flexDirection: "column", gap: "2px" }}
+        >
           <div className="osd-label-row">
             <span className="osd-title" style={{ fontWeight: 700, color: "#fff" }}>
               {osd.title ?? "¡Mapa 7K Guardado!"}

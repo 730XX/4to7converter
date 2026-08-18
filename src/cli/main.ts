@@ -55,7 +55,7 @@ async function run(): Promise<void> {
     ) {
       printError(error);
     } else {
-      console.error(`Unexpected error: ${String(error)}`);
+      console.error(`Error inesperado: ${String(error)}`);
     }
     process.exitCode = 1;
   }
@@ -63,23 +63,24 @@ async function run(): Promise<void> {
 
 /** Imprime un resumen legible del resultado de la conversión. */
 function printSummary(result: Awaited<ReturnType<typeof convertFile>>): void {
-  console.log(`Source beatmap: ${result.sourceKeyCount}k, ${result.sourceNoteCount} notes`);
-  console.log(`Converted:      ${result.targetKeyCount}k, ${result.targetNoteCount} notes`);
+  console.log(`Beatmap fuente: ${result.sourceKeyCount}k, ${result.sourceNoteCount} notas`);
+  console.log(`Convertido:     ${result.targetKeyCount}k, ${result.targetNoteCount} notas`);
 
   if (result.issues.length === 0) {
-    console.log("Issues:         none");
+    console.log("Problemas:      ninguno");
   } else {
     const errorCount = result.issues.filter((issue) => issue.severity === "error").length;
     const warningCount = result.issues.length - errorCount;
     console.log(
-      `Issues:         ${result.issues.length} (${errorCount} errors, ${warningCount} warnings)`,
+      `Problemas:      ${result.issues.length} (${errorCount} errores, ${warningCount} advertencias)`,
     );
     for (const issue of result.issues) {
-      console.log(`  ${issue.severity} ${issue.code}: ${issue.message}`);
+      const severityLabel = issue.severity === "error" ? "error" : "advertencia";
+      console.log(`  ${severityLabel} ${issue.code}: ${issue.message}`);
     }
   }
 
-  console.log(`Wrote:          ${result.outputPath}`);
+  console.log(`Guardado en:    ${result.outputPath}`);
 }
 
 /** Imprime un error con su código numérico estable. */
@@ -90,15 +91,15 @@ function printError(error: CliError | OsuParseError | ConversionError): void {
 /** Imprime el uso de la CLI. */
 function printUsage(): void {
   console.log(`
-Convert an osu!mania 4k beatmap to another key count.
+Convierte un beatmap de osu!mania 4k a otra cantidad de teclas.
 
-Usage: npm run convert -- <input.osu> [options]
+Uso: npm run convert -- <input.osu> [opciones]
 
-Options:
-  -o, --output <file>   Output .osu file (default: <input basename>-7k.osu)
-  -m, --lane-map <json> Lane map as a JSON array of arrays, e.g. [[0,1],[2,3],[4],[5,6]]
-  -k, --keys <n>        Target key count (default: 7; requires --lane-map when not 7)
-  -h, --help            Show this help
+Opciones:
+  -o, --output <archivo>   Archivo .osu de salida (por defecto: <nombre>-7k.osu)
+  -m, --lane-map <json>    Lane map como arreglo JSON de arreglos, p. ej. [[0,1],[2,3],[4],[5,6]]
+  -k, --keys <n>           Cantidad de teclas destino (por defecto: 7; requiere --lane-map si no es 7)
+  -h, --help               Muestra esta ayuda
 `);
 }
 

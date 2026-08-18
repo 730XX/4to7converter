@@ -23,17 +23,47 @@ export interface ConvertBeatmapOptions {
  * @throws {ConversionError} Con un código numérico estable cuando el lane map es inválido.
  */
 export function convertBeatmap(beatmap: OsuBeatmap, options: ConvertBeatmapOptions): OsuBeatmap {
-  assertValidLaneMap(options.laneMap.sourceColumnToTargetColumns, options.targetKeyCount);
+  const { laneMap, targetKeyCount } = options;
+  assertValidLaneMap(laneMap.sourceColumnToTargetColumns, targetKeyCount);
+  assertLaneMapCoversSourceColumns(beatmap, laneMap);
 
   const hitObjects = beatmap.hitObjects
-    .flatMap((hitObject) => projectHitObject(hitObject, options.laneMap))
+    .flatMap((hitObject) => projectHitObject(hitObject, laneMap))
     .sort(compareHitObjects);
 
   return {
     ...beatmap,
-    keyCount: options.targetKeyCount,
+    keyCount: targetKeyCount,
     hitObjects,
   };
+}
+
+/**
+ * Verifica que el lane map cubra todas las columnas que usa el beatmap fuente
+ * antes de proyectar. Sin esta guardia, una nota de una columna sin mapeo
+ * lanza un error a mitad de la proyección con un mensaje que no nombra la
+ * causa real. La comparación es contra la columna máxima usada por las notas,
+ * no contra el keyCount, para permitir lane maps parciales.
+ *
+ * @param beatmap - El beatmap fuente a convertir.
+ * @param laneMap - El lane map que define las columnas destino.
+ * @throws {ConversionError} Con código {@link ConversionErrorCode.SourceKeyCountMismatch}
+ * cuando alguna nota cae en una columna fuera de la cobertura del lane map.
+ */
+function assertLaneMapCoversSourceColumns(beatmap: OsuBeatmap, laneMap: LaneMap): void {
+  const coveredSourceColumns = laneMap.sourceColumnToTargetColumns.length;
+  let maxUsedColumn = -1;
+  for (const hitObject of beatmap.hitObjects) {
+    maxUsedColumn = Math.max(maxUsedColumn, hitObject.column);
+  }
+  if (maxUsedColumn >= coveredSourceColumns) {
+    throw new ConversionError(
+      ConversionErrorCode.SourceKeyCountMismatch,
+      `El beatmap tiene notas en la columna ${maxUsedColumn} pero el lane map solo cubre las columnas 0..${
+        coveredSourceColumns - 1
+      }. Carga un mapa 4k o proporciona un lane map que lo cubra.`,
+    );
+  }
 }
 
 /**
@@ -55,7 +85,7 @@ function projectHitObject(hitObject: HitObject, laneMap: LaneMap): HitObject[] {
   if (targetColumns === undefined || targetColumns.length === 0) {
     throw new ConversionError(
       ConversionErrorCode.EmptyLaneMapping,
-      `Source column ${hitObject.column} maps to no target column.`,
+      `La columna fuente ${hitObject.column} no tiene columnas destino.`,
     );
   }
 

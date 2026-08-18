@@ -31,6 +31,7 @@ function extractStructuralData(beatmap: OsuBeatmap) {
       type: hitObject.type,
       endTimeMs: hitObject.endTimeMs,
       hitSound: hitObject.hitSound,
+      hitSample: hitObject.hitSample,
     })),
   };
 }

@@ -80,6 +80,10 @@ class HitSoundEngine {
       gain.connect(ctx.destination);
 
       source.start(0);
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+      };
     } catch (err) {
       console.warn("Error al reproducir hitsound buffer:", err);
     }

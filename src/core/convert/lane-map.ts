@@ -55,7 +55,7 @@ function assertTargetColumnsPresent(targetColumns: readonly number[], sourceColu
   if (targetColumns.length === 0) {
     throw new ConversionError(
       ConversionErrorCode.EmptyLaneMapping,
-      `Source column ${sourceColumn} maps to no target column.`,
+      `La columna fuente ${sourceColumn} no tiene columnas destino.`,
     );
   }
 }
@@ -70,7 +70,7 @@ function assertTargetColumnsInRange(
     if (!Number.isInteger(targetColumn) || targetColumn < 0 || targetColumn >= targetKeyCount) {
       throw new ConversionError(
         ConversionErrorCode.TargetColumnOutOfRange,
-        `Source column ${sourceColumn} maps to target column ${targetColumn}, which is outside the valid range 0..${
+        `La columna fuente ${sourceColumn} mapea a la columna destino ${targetColumn}, fuera del rango válido 0..${
           targetKeyCount - 1
         }.`,
       );
@@ -85,7 +85,7 @@ function assertTargetColumnsUnique(targetColumns: readonly number[], sourceColum
     if (seenColumns.has(targetColumn)) {
       throw new ConversionError(
         ConversionErrorCode.DuplicateTargetColumn,
-        `Source column ${sourceColumn} maps to target column ${targetColumn} more than once.`,
+        `La columna fuente ${sourceColumn} mapea a la columna destino ${targetColumn} más de una vez.`,
       );
     }
     seenColumns.add(targetColumn);

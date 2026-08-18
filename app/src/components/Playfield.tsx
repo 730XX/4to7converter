@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { OsuBeatmap } from "../../../src/core/osu/types";
-import { hitSoundEngine } from "../lib/hitsound";
 import type { PlaybackControls } from "../lib/use-playback";
 import {
   buildPlayfieldPalette,
@@ -18,9 +17,7 @@ interface PlayfieldProps {
   scrollDirection?: "down" | "up";
   previewMode?: "7k" | "4k" | "split";
   hitGlow?: boolean;
-  hitsounds?: boolean;
   volume?: number;
-  hitsoundVolume?: number;
 }
 
 /**
@@ -37,19 +34,15 @@ export function Playfield({
   scrollDirection = "down",
   previewMode = "7k",
   hitGlow = true,
-  hitsounds = true,
   volume = 80,
-  hitsoundVolume = 80,
 }: PlayfieldProps) {
   const isSplit = previewMode === "split" && sourceBeatmap && targetBeatmap;
   const activeBeatmap = beatmap ?? (previewMode === "4k" ? sourceBeatmap : targetBeatmap);
 
-  
   if (isSplit) {
     return (
       <section className="preview-card preview-card--split">
         <div className="preview-split-container">
-          
           <div className="preview-split-track preview-split-track--4k">
             {/* <span className="preview-pane-badge mono">4K Originalasdasda</span>*/}
             <SinglePlayfieldCanvas
@@ -58,9 +51,7 @@ export function Playfield({
               scrollSpeed={scrollSpeed}
               scrollDirection={scrollDirection}
               hitGlow={hitGlow}
-              hitsounds={hitsounds}
               volume={volume}
-              hitsoundVolume={hitsoundVolume}
             />
           </div>
           <div className="preview-split-divider" aria-hidden="true" />
@@ -72,9 +63,7 @@ export function Playfield({
               scrollSpeed={scrollSpeed}
               scrollDirection={scrollDirection}
               hitGlow={hitGlow}
-              hitsounds={hitsounds}
               volume={volume}
-              hitsoundVolume={hitsoundVolume}
             />
           </div>
         </div>
@@ -95,9 +84,7 @@ export function Playfield({
           scrollSpeed={scrollSpeed}
           scrollDirection={scrollDirection}
           hitGlow={hitGlow}
-          hitsounds={hitsounds}
           volume={volume}
-          hitsoundVolume={hitsoundVolume}
         />
       </div>
     </section>
@@ -110,9 +97,7 @@ interface SinglePlayfieldCanvasProps {
   scrollSpeed: number;
   scrollDirection: "down" | "up";
   hitGlow: boolean;
-  hitsounds: boolean;
   volume: number;
-  hitsoundVolume: number;
 }
 
 function SinglePlayfieldCanvas({
@@ -121,9 +106,7 @@ function SinglePlayfieldCanvas({
   scrollSpeed,
   scrollDirection,
   hitGlow,
-  hitsounds,
   volume,
-  hitsoundVolume,
 }: SinglePlayfieldCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -132,19 +115,14 @@ function SinglePlayfieldCanvas({
   const scrollSpeedRef = useRef(scrollSpeed);
   const scrollDirectionRef = useRef(scrollDirection);
   const hitGlowRef = useRef(hitGlow);
-  const hitsoundsRef = useRef(hitsounds);
   const volumeRef = useRef(volume);
-  const hitsoundVolumeRef = useRef(hitsoundVolume);
-  const lastCheckedTimeRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
 
   beatmapRef.current = beatmap;
   scrollSpeedRef.current = scrollSpeed;
   scrollDirectionRef.current = scrollDirection;
   hitGlowRef.current = hitGlow;
-  hitsoundsRef.current = hitsounds;
   volumeRef.current = volume;
-  hitsoundVolumeRef.current = hitsoundVolume;
 
   const palette = useMemo(() => buildPlayfieldPalette(beatmap.keyCount), [beatmap.keyCount]);
   paletteRef.current = palette;
@@ -206,26 +184,6 @@ function SinglePlayfieldCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const currentTimeMs = playback.currentTimeMsRef.current;
-
-    // Hitsounds sintéticos en reproducción activa
-    if (hitsoundsRef.current && playback.isPlaying) {
-      const prevTime = lastCheckedTimeRef.current;
-      if (currentTimeMs > prevTime && currentTimeMs - prevTime < 250) {
-        let hasHit = false;
-        for (const ho of beatmapRef.current.hitObjects) {
-          if (ho.timeMs > prevTime && ho.timeMs <= currentTimeMs) {
-            hasHit = true;
-            break;
-          }
-        }
-        if (hasHit) {
-          hitSoundEngine.playHit(hitsoundVolumeRef.current / 100);
-        }
-      }
-      lastCheckedTimeRef.current = currentTimeMs;
-    } else {
-      lastCheckedTimeRef.current = currentTimeMs;
-    }
 
     // 17500 / scrollSpeed (25 = 700ms)
     const approachMs = Math.round(17500 / Math.max(scrollSpeedRef.current, 5));

@@ -44,6 +44,28 @@ describe("parseOsuFile", () => {
     expect(holdNote).toMatchObject({ column: 1, type: 128, endTimeMs: 3500 });
   });
 
+  it("preserves custom hit samples on circles and holds", () => {
+    const contentWithSamples = [
+      "osu file format v14",
+      "[General]",
+      "Mode: 3",
+      "[Difficulty]",
+      "CircleSize: 4",
+      "[HitObjects]",
+      "64,192,1000,1,0,1:2:0:0:kick.wav",
+      "192,192,2000,128,0,2500:3:4:5:80:tail.wav",
+    ].join("\n");
+
+    const beatmap = parseOsuFile(contentWithSamples);
+
+    expect(beatmap.hitObjects[0]).toMatchObject({ type: 1, hitSample: "1:2:0:0:kick.wav" });
+    expect(beatmap.hitObjects[1]).toMatchObject({
+      type: 128,
+      endTimeMs: 2500,
+      hitSample: "3:4:5:80:tail.wav",
+    });
+  });
+
   it("accepts hit object types with the new-combo flag", () => {
     const contentWithFlags = [
       "osu file format v14",

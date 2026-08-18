@@ -77,7 +77,7 @@ function collectColumnOutOfRange(
     issues.push({
       severity: "error",
       code: ConversionIssueCode.ColumnOutOfRange,
-      message: `Note at ${hitObject.timeMs}ms is on column ${hitObject.column}, outside the valid range 0..${keyCount - 1}.`,
+      message: `La nota en ${hitObject.timeMs} ms está en la columna ${hitObject.column}, fuera del rango válido 0..${keyCount - 1}.`,
       timeMs: hitObject.timeMs,
       column: hitObject.column,
     });
@@ -95,7 +95,7 @@ function collectDuplicates(
     issues.push({
       severity: "error",
       code: ConversionIssueCode.DuplicateNote,
-      message: `Multiple notes share time ${hitObject.timeMs}ms on column ${hitObject.column}.`,
+      message: `Varias notas comparten el tiempo ${hitObject.timeMs} ms en la columna ${hitObject.column}.`,
       timeMs: hitObject.timeMs,
       column: hitObject.column,
     });
@@ -120,7 +120,7 @@ function collectHoldOverlaps(
     issues.push({
       severity: "warning",
       code: ConversionIssueCode.HoldOverlap,
-      message: `Note at ${hitObject.timeMs}ms overlaps a hold note on column ${hold.column} that ends at ${hold.endTimeMs}ms.`,
+      message: `La nota en ${hitObject.timeMs} ms se superpone con una hold note en la columna ${hold.column} que termina en ${hold.endTimeMs} ms.`,
       timeMs: hitObject.timeMs,
       column: hitObject.column,
     });

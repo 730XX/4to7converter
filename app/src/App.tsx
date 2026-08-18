@@ -1,11 +1,13 @@
-import { FilePlus, Music, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { convertBeatmap } from "../../src/core/convert/engine";
+import { ConversionError } from "../../src/core/convert/errors";
 import { validateConvertedBeatmap } from "../../src/core/convert/validate";
 import type { ConversionIssue } from "../../src/core/convert/validate";
 import { parseOsuFile } from "../../src/core/osu/parser";
 import { OsuParseError } from "../../src/core/osu/types";
 import type { OsuBeatmap } from "../../src/core/osu/types";
+import { BeatmapHeaderCard } from "./components/BeatmapHeaderCard";
 import { DebugConsole } from "./components/DebugConsole";
 import { FileDropZone } from "./components/FileDropZone";
 import { IssuesPanel } from "./components/IssuesPanel";
@@ -18,7 +20,15 @@ import { StatsBar } from "./components/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
 import { appLogger } from "./lib/logger";
-import { isTauri, loadBeatmapWithAudio, saveBeatmap, toAssetUrl, toAudioUrl } from "./lib/native";
+import {
+  isTauri,
+  listBeatmapDifficulties,
+  loadBeatmapWithAudio,
+  saveBeatmap,
+  toAssetUrl,
+  toAudioUrl,
+  type BeatmapDiffItem,
+} from "./lib/native";
 import {
   createDefaultLaneMapState,
   getTargetColumnCounts,
@@ -26,6 +36,7 @@ import {
   type LaneMapState,
 } from "./lib/lane-map-state";
 import { loadSettings, saveSettings, type UserSettings } from "./lib/settings";
+import { deletePreset, loadPresets, savePreset, type LanePreset } from "./lib/lane-presets";
 import { usePlayback } from "./lib/use-playback";
 
 const TARGET_KEY_COUNT = 7;
@@ -51,11 +62,13 @@ export default function App() {
   const [loadError, setLoadError] = useState<LoadError | null>(null);
   const [laneMapState, setLaneMapState] = useState<LaneMapState>(createDefaultLaneMapState);
   const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [difficulties, setDifficulties] = useState<BeatmapDiffItem[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
+  const [presets, setPresets] = useState<LanePreset[]>(() => loadPresets());
   const [osd, setOsd] = useState<OsdState | null>(null);
   const osdTimerRef = useRef<number | null>(null);
 
@@ -72,6 +85,8 @@ export default function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  const playbackRef = useRef<PlaybackControls | null>(null);
 
   // Atajos de teclado y combinaciones con rueda de ratón
   useEffect(() => {
@@ -172,6 +187,20 @@ export default function App() {
         });
         return;
       }
+
+      // 4. Rueda normal (sin modificadores): Navegación temporal en el mapa (Seek)
+      // Hacia arriba (deltaY < 0): retroceder | Hacia abajo (deltaY > 0): adelantar
+      const isInsideScrollable = (event.target as HTMLElement | null)?.closest?.(
+        ".app-sidebar, .settings-content, .debug-console-body, .modal-dialog",
+      );
+
+      if (!isInsideScrollable && playbackRef.current) {
+        event.preventDefault();
+        const stepMs = event.shiftKey ? 1000 : 250;
+        const deltaMs = event.deltaY < 0 ? -stepMs : stepMs;
+        const currentTime = playbackRef.current.currentTimeMsRef.current ?? 0;
+        playbackRef.current.seekTo(currentTime + deltaMs);
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -180,7 +209,7 @@ export default function App() {
 
     function handleResize(): void {
       console.log(
-        `📐 [Tauri Window Resize] Width: ${window.innerWidth}px, Height: ${window.innerHeight}px (Outer: ${window.outerWidth}x${window.outerHeight}px)`,
+        ` [Tauri Window Resize] Width: ${window.innerWidth}px, Height: ${window.innerHeight}px (Outer: ${window.outerWidth}x${window.outerHeight}px)`,
       );
     }
 
@@ -209,9 +238,20 @@ export default function App() {
       setBackgroundUrl(backgroundPath === null ? null : toAssetUrl(backgroundPath));
       setLaneMapState(createDefaultLaneMapState());
       setIsFileModalOpen(false);
+
+      // Cargar lista de todas las dificultades del mapset
+      listBeatmapDifficulties(path)
+        .then((diffs) => {
+          if (diffs.length > 0) {
+            setDifficulties(diffs);
+          }
+        })
+        .catch((err) => {
+          console.error("Error al listar dificultades:", err);
+        });
     } catch (error) {
       console.error("Error al cargar beatmap desde path:", error);
-      if (error instanceof OsuParseError) {
+      if (error instanceof OsuParseError || error instanceof ConversionError) {
         setLoadError({ message: error.message, code: error.code });
       } else {
         const message = error instanceof Error ? error.message : String(error);
@@ -220,6 +260,7 @@ export default function App() {
       setSource(null);
       setFileName(null);
       setSourcePath(null);
+      setDifficulties([]);
       setAudioUrl(null);
       setBackgroundUrl(null);
     }
@@ -232,12 +273,13 @@ export default function App() {
       setSource(parsed);
       setFileName(file.name);
       setSourcePath(null);
+      setDifficulties([]);
       setLoadError(null);
       setAudioUrl(null);
       setLaneMapState(createDefaultLaneMapState());
       setIsFileModalOpen(false);
     } catch (error) {
-      if (error instanceof OsuParseError) {
+      if (error instanceof OsuParseError || error instanceof ConversionError) {
         setLoadError({ message: error.message, code: error.code });
       } else {
         setLoadError({ message: "No se pudo leer el archivo.", code: 0 });
@@ -245,6 +287,7 @@ export default function App() {
       setSource(null);
       setFileName(null);
       setSourcePath(null);
+      setDifficulties([]);
       setAudioUrl(null);
     }
   }
@@ -256,6 +299,7 @@ export default function App() {
     setSource(null);
     setFileName(null);
     setSourcePath(null);
+    setDifficulties([]);
     setLoadError(null);
     setAudioUrl(null);
     setBackgroundUrl(null);
@@ -295,7 +339,22 @@ export default function App() {
     beatmap: converted ?? EMPTY_BEATMAP,
     audioUrl,
     volume: settings.volume,
+    hitsoundsEnabled: settings.hitsounds,
+    hitsoundVolume: settings.hitsoundVolume,
   });
+  playbackRef.current = playback;
+
+  function handleSavePreset(name: string): void {
+    setPresets((previous) => savePreset(previous, name, laneMapState));
+  }
+
+  function handleDeletePreset(id: string): void {
+    setPresets((previous) => deletePreset(previous, id));
+  }
+
+  function handleApplyPreset(preset: LanePreset): void {
+    setLaneMapState(preset.laneMapState);
+  }
 
   async function handleExport(): Promise<void> {
     if (source === null || converted === null || fileName === null) {
@@ -328,7 +387,7 @@ export default function App() {
         const newPath = `${dir}\\${newFileName}`;
 
         await saveBeatmap(newPath, content);
-        appLogger.info(`💾 [Export] ¡Mapa 7K guardado exitosamente en: ${newPath}`);
+        appLogger.info(`[Export] ¡Mapa 7K guardado exitosamente en: ${newPath}`);
         triggerOsd({
           type: "export",
           title: "¡Exportado a osu!",
@@ -336,7 +395,7 @@ export default function App() {
         });
       } catch (err) {
         console.error("Error al guardar el beatmap:", err);
-        appLogger.error(`⚠️ [Export] Error al guardar archivo en disco: ${err}`);
+        appLogger.error(`[AVISO] [Export] Error al guardar archivo en disco: ${err}`);
         // Fallback en caso de error de escritura
         const baseName = `${fileName.replace(/\.osu$/i, "")}-7k`;
         downloadConvertedBeatmap(exportBeatmap, baseName);
@@ -410,39 +469,28 @@ export default function App() {
       <main className="app-shell">
         <div className="app-layout">
           <aside className="app-sidebar">
-            <header className="app-header">
-              <div className="app-header-file">
-                <div className="app-header-file-meta">
-                  <Music size={16} className="text-accent" />
-                  <span className="file-name">{fileName}</span>
-                  <span className="key-badge">{source.keyCount}k</span>
-                </div>
-                {sourcePath !== null && (
-                  <span className={`audio-status${audioUrl === null ? " is-missing" : ""}`}>
-                    {audioUrl === null
-                      ? "No se encontró el audio en la carpeta del mapa"
-                      : "Audio sincronizado"}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="ghost-button ghost-button--icon"
-                onClick={() => {
-                  playback.pause();
-                  setIsFileModalOpen(true);
-                }}
-                title="Abrir otro beatmap"
-              >
-                <FilePlus size={15} />
-                <span>Nuevo</span>
-              </button>
-            </header>
+            <BeatmapHeaderCard
+              source={source}
+              fileName={fileName}
+              backgroundUrl={backgroundUrl}
+              audioUrl={audioUrl}
+              sourcePath={sourcePath}
+              difficulties={difficulties}
+              onSelectDifficulty={(newPath) => void handlePathSelected(newPath)}
+              onOpenNewFile={() => {
+                playback.pause();
+                setIsFileModalOpen(true);
+              }}
+            />
             <LaneMapper
               state={laneMapState}
               sourceKeyCount={source.keyCount}
               targetKeyCount={TARGET_KEY_COUNT}
               onChange={setLaneMapState}
+              presets={presets}
+              onSavePreset={handleSavePreset}
+              onDeletePreset={handleDeletePreset}
+              onApplyPreset={handleApplyPreset}
             />
             <StatsBar
               source={source}
@@ -462,17 +510,11 @@ export default function App() {
               scrollDirection={settings.scrollDirection}
               previewMode={settings.previewMode}
               hitGlow={settings.hitGlow}
-              hitsounds={settings.hitsounds}
               volume={settings.volume}
-              hitsoundVolume={settings.hitsoundVolume}
             />
           </section>
         </div>
-        <PlaybackFooter
-          playback={playback}
-          beatmap={converted ?? source}
-          onExport={handleExport}
-        />
+        <PlaybackFooter playback={playback} beatmap={converted ?? source} onExport={handleExport} />
       </main>
 
       <SettingsDrawer

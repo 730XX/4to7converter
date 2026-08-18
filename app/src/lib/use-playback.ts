@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { OsuBeatmap } from "../../../src/core/osu/types";
 import { createAudioPlayer, type AudioPlayer } from "./audio";
+import { hitSoundEngine } from "./hitsound.js";
 
 /** Tiempo adicional tras la última nota donde la vista previa sigue activa. */
 const END_PADDING_MS = 2000;
@@ -30,6 +31,18 @@ export interface PlaybackControls {
 }
 
 /**
+ * Opciones del hook de reproducción: el beatmap convertido, la URL de audio y
+ * los parámetros de los hitsounds sintéticos.
+ */
+export interface UsePlaybackOptions {
+  beatmap: OsuBeatmap;
+  audioUrl: string | null;
+  volume?: number; // 0 - 100
+  hitsoundsEnabled?: boolean;
+  hitsoundVolume?: number; // 0 - 100
+}
+
+/**
  * Hook que centraliza toda la lógica de reproducción de la vista previa: ciclo
  * de vida del reproductor de audio, reloj maestro, detección de fin, control
  * de velocidad y atajo de teclado (Espacio). El dibujo del canvas queda fuera
@@ -38,12 +51,8 @@ export interface PlaybackControls {
  * @param options - El beatmap convertido y la URL de audio asociada, o null.
  * @returns Controles de reproducción listos para la UI.
  */
-export function usePlayback(options: {
-  beatmap: OsuBeatmap;
-  audioUrl: string | null;
-  volume?: number; // 0 - 100
-}): PlaybackControls {
-  const { beatmap, audioUrl, volume = 80 } = options;
+export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
+  const { beatmap, audioUrl, volume = 80, hitsoundsEnabled = true, hitsoundVolume = 80 } = options;
   const audioRef = useRef<AudioPlayer | null>(null);
   const isPlayingRef = useRef(false);
   const currentTimeMsRef = useRef(0);
@@ -54,6 +63,10 @@ export function usePlayback(options: {
   const durationMsRef = useRef(0);
   const speedRef = useRef(1);
   const volumeRef = useRef(volume);
+  const beatmapRef = useRef(beatmap);
+  const hitsoundsEnabledRef = useRef(hitsoundsEnabled);
+  const hitsoundVolumeRef = useRef(hitsoundVolume);
+  const hitsoundLastCheckedRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -63,6 +76,9 @@ export function usePlayback(options: {
 
   speedRef.current = speed;
   volumeRef.current = volume;
+  beatmapRef.current = beatmap;
+  hitsoundsEnabledRef.current = hitsoundsEnabled;
+  hitsoundVolumeRef.current = hitsoundVolume;
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -152,7 +168,9 @@ export function usePlayback(options: {
       if (isPlayingRef.current) {
         if (audioAvailable) {
           lastFrameNowRef.current = now;
-          currentTimeMsRef.current = audio.getCurrentTimeMs();
+          if (!audio.isSeeking()) {
+            currentTimeMsRef.current = audio.getCurrentTimeMs();
+          }
           const audioDuration = audioDurationRef.current ?? 0;
           if (currentTimeMsRef.current >= audioDuration - END_EPSILON_MS) {
             stopPlayback();
@@ -168,11 +186,28 @@ export function usePlayback(options: {
             stopPlayback();
           }
         }
+
+        // Detección determinista de hitsounds: cada nota cuyo tiempo cae en el
+        // intervalo recién recorrido dispara un hit. El guard de 500 ms evita
+        // una ráfaga de hits tras un seek o restart.
+        const hitDelta = currentTimeMsRef.current - hitsoundLastCheckedRef.current;
+        if (hitsoundsEnabledRef.current && hitDelta > 0 && hitDelta < 500) {
+          for (const hitObject of beatmapRef.current.hitObjects) {
+            if (
+              hitObject.timeMs > hitsoundLastCheckedRef.current &&
+              hitObject.timeMs <= currentTimeMsRef.current
+            ) {
+              hitSoundEngine.playHit(hitsoundVolumeRef.current / 100);
+            }
+          }
+        }
       }
 
       if (isPlayingRef.current && currentTimeMsRef.current >= endBoundRef.current) {
         stopPlayback();
       }
+
+      hitsoundLastCheckedRef.current = currentTimeMsRef.current;
 
       if (now - lastLabelSyncRef.current >= LABEL_SYNC_MS) {
         lastLabelSyncRef.current = now;
@@ -233,10 +268,10 @@ export function usePlayback(options: {
   function seekTo(timeMs: number): void {
     const clamped = Math.max(0, Math.min(timeMs, durationMsRef.current));
     currentTimeMsRef.current = clamped;
+    hitsoundLastCheckedRef.current = clamped;
+    lastFrameNowRef.current = performance.now();
     audioRef.current?.seek(clamped);
-    if (!isPlayingRef.current) {
-      setTimerTimeMs(Math.round(clamped));
-    }
+    setTimerTimeMs(Math.round(clamped));
   }
 
   function restart(): void {

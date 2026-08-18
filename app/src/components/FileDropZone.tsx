@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ArrowRight, CheckCircle2, FileMusic, Gamepad2, RefreshCw, UploadCloud, X } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  FileMusic,
+  Gamepad2,
+  RefreshCw,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import { detectOsuBeatmap, isTauri, type OsuDetectedBeatmap } from "../lib/native";
 
 interface FileDropZoneProps {
@@ -222,9 +230,7 @@ export function FileDropZone({ onPathSelected, onFileSelected, onClose }: FileDr
               </div>
 
               <div className="osu-detect-info">
-                <p className="osu-detect-title">
-                  {detectedMap.title || detectedMap.folder_name}
-                </p>
+                <p className="osu-detect-title">{detectedMap.title || detectedMap.folder_name}</p>
                 <p className="osu-detect-meta mono">
                   {detectedMap.version ? `[${detectedMap.version}]` : detectedMap.file_name}
                 </p>
@@ -244,7 +250,7 @@ export function FileDropZone({ onPathSelected, onFileSelected, onClose }: FileDr
             <div className="osu-detect-card osu-detect-card--idle">
               <div className="osu-detect-idle-content">
                 <Gamepad2 size={16} className="text-muted" />
-                <span className="osu-detect-idle-text">¿Tenés osu! abierto?</span>
+                <span className="osu-detect-idle-text">¿Tienes osu! abierto?</span>
               </div>
               <button
                 type="button"
@@ -267,10 +273,13 @@ export function FileDropZone({ onPathSelected, onFileSelected, onClose }: FileDr
 
       <button type="button" className="drop-zone-button" onClick={() => void openFilePicker()}>
         <span className="drop-zone-prompt">
-          <UploadCloud size={20} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 8 }} />
-          Arrastrá tu archivo .osu acá
+          <UploadCloud
+            size={20}
+            style={{ display: "inline-block", verticalAlign: "middle", marginRight: 8 }}
+          />
+          Arrastra tu archivo .osu aquí
         </span>
-        <span className="drop-zone-browse">o hacé clic para buscarlo</span>
+        <span className="drop-zone-browse">o haz clic para buscarlo</span>
       </button>
 
       <p className="drop-zone-helper">Solo mapas osu!mania (Mode 3)</p>

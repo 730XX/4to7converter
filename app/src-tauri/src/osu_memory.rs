@@ -36,7 +36,7 @@ pub mod windows_scanner {
         unsafe {
             let snapshot: HANDLE = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
             if snapshot == 0 as HANDLE || snapshot == -1isize as HANDLE {
-                logs.push("⚠️ [Rust] CreateToolhelp32Snapshot falló".into());
+                logs.push("[AVISO] [Rust] CreateToolhelp32Snapshot falló".into());
                 return None;
             }
 
@@ -55,7 +55,7 @@ pub mod windows_scanner {
                     if exe_name.eq_ignore_ascii_case("osu!.exe") {
                         let pid = entry.th32ProcessID;
                         CloseHandle(snapshot);
-                        logs.push(format!("✅ [Rust] Proceso osu!.exe detectado (PID: {})", pid));
+                        logs.push(format!("[OK] [Rust] Proceso osu!.exe detectado (PID: {})", pid));
                         return Some(pid);
                     }
 
@@ -66,7 +66,7 @@ pub mod windows_scanner {
             }
 
             CloseHandle(snapshot);
-            logs.push("❌ [Rust] Proceso osu!.exe no encontrado en ejecución".into());
+            logs.push("[ERROR] [Rust] Proceso osu!.exe no encontrado en ejecución".into());
             None
         }
     }
@@ -101,7 +101,7 @@ pub mod windows_scanner {
     pub fn resolve_songs_dir(pid: u32, logs: &mut Vec<String>) -> Option<PathBuf> {
         // 1. Obtener carpeta desde el ejecutable real de osu!.exe
         let base_dir = if let Some(dir) = get_osu_install_dir(pid) {
-            logs.push(format!("📁 [Rust] Ruta de osu!.exe detectada: {:?}", dir));
+            logs.push(format!("[CARPETA] [Rust] Ruta de osu!.exe detectada: {:?}", dir));
             dir
         } else if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             PathBuf::from(local_app_data).join("osu!")
@@ -123,7 +123,7 @@ pub mod windows_scanner {
                                     let pb = PathBuf::from(custom_path);
                                     let full = if pb.is_absolute() { pb } else { base_dir.join(pb) };
                                     if full.exists() {
-                                        logs.push(format!("📂 [Rust] Carpeta Songs personalizada encontrada en cfg: {:?}", full));
+                                        logs.push(format!("[CARPETA] [Rust] Carpeta Songs personalizada encontrada en cfg: {:?}", full));
                                         return Some(full);
                                     }
                                 }
@@ -137,7 +137,7 @@ pub mod windows_scanner {
         // 3. Comprobar Songs estándar en la carpeta base de osu!
         let default_songs = base_dir.join("Songs");
         if default_songs.exists() {
-            logs.push(format!("📂 [Rust] Carpeta Songs estándar encontrada: {:?}", default_songs));
+            logs.push(format!("[CARPETA] [Rust] Carpeta Songs estándar encontrada: {:?}", default_songs));
             return Some(default_songs);
         }
 
@@ -153,12 +153,12 @@ pub mod windows_scanner {
 
         for cand in fallback_candidates {
             if cand.exists() {
-                logs.push(format!("📂 [Rust] Carpeta Songs encontrada en fallback: {:?}", cand));
+                logs.push(format!("[CARPETA] [Rust] Carpeta Songs encontrada en fallback: {:?}", cand));
                 return Some(cand);
             }
         }
 
-        logs.push(format!("❌ [Rust] No se encontró la carpeta Songs en {:?}", default_songs));
+        logs.push(format!("[ERROR] [Rust] No se encontró la carpeta Songs en {:?}", default_songs));
         None
     }
 
@@ -205,15 +205,15 @@ pub mod windows_scanner {
             );
 
             if search_data.title.is_empty() {
-                logs.push(format!("⚠️ [Rust] Ventanas detectadas: {:?}", search_data.all_titles));
+                logs.push(format!("[AVISO] [Rust] Ventanas detectadas: {:?}", search_data.all_titles));
                 return None;
             }
 
             let win_title = search_data.title;
-            logs.push(format!("🪟 [Rust] Título capturado: '{}'", win_title));
+            logs.push(format!("[VENTANA] [Rust] Título capturado: '{}'", win_title));
 
             if win_title.trim() == "osu!" {
-                logs.push("ℹ️ [Rust] Título es solo 'osu!' (En menú principal o cargando)".into());
+                logs.push("[INFO] [Rust] Título es solo 'osu!' (En menú principal o cargando)".into());
                 return None;
             }
 
@@ -240,12 +240,12 @@ pub mod windows_scanner {
             };
 
             if artist.is_empty() && title.is_empty() {
-                logs.push(format!("⚠️ [Rust] No se pudo parsear artista/canción de: '{}'", raw));
+                logs.push(format!("[AVISO] [Rust] No se pudo parsear artista/canción de: '{}'", raw));
                 return None;
             }
 
             logs.push(format!(
-                "🎵 [Rust] Parseado: Artista='{}', Título='{}', Dificultad='{}'",
+                "[MUSICA] [Rust] Parseado: Artista='{}', Título='{}', Dificultad='{}'",
                 artist, title, difficulty
             ));
 
@@ -285,7 +285,7 @@ pub mod windows_scanner {
                                             && (lower_fname.contains(&format!("[{}]", lower_diff))
                                                 || lower_fname.contains(&lower_diff))
                                         {
-                                            logs.push(format!("🎉 [Rust] ¡Match exacto con dificultad!: {:?}", fpath));
+                                            logs.push(format!("[OK] [Rust] ¡Match exacto con dificultad!: {:?}", fpath));
                                             return Some(OsuDetectedBeatmap {
                                                 path: fpath.to_string_lossy().to_string(),
                                                 folder_name,
@@ -312,7 +312,7 @@ pub mod windows_scanner {
 
                                 if let Some(cand) = best_candidate.clone() {
                                     if lower_diff.is_empty() {
-                                        logs.push(format!("🎉 [Rust] ¡Match en menú Song Select!: {:?}", cand.path));
+                                        logs.push(format!("[OK] [Rust] ¡Match en menú Song Select!: {:?}", cand.path));
                                         return Some(cand);
                                     }
                                 }
@@ -322,12 +322,12 @@ pub mod windows_scanner {
                 }
 
                 if let Some(cand) = best_candidate {
-                    logs.push(format!("🎉 [Rust] ¡Match por carpeta Songs!: {:?}", cand.path));
+                    logs.push(format!("[OK] [Rust] ¡Match por carpeta Songs!: {:?}", cand.path));
                     return Some(cand);
                 }
             }
 
-            logs.push("⚠️ [Rust] No se encontró carpeta coincidente en Songs".into());
+            logs.push("[AVISO] [Rust] No se encontró carpeta coincidente en Songs".into());
             None
         }
     }
@@ -362,7 +362,7 @@ pub mod windows_scanner {
         }
 
         if !exe_path.exists() {
-            logs.push(format!("⚠️ [Rust/C#] Helper osu-detector no encontrado en {:?}", current));
+            logs.push(format!("[AVISO] [Rust/C#] Helper osu-detector no encontrado en {:?}", current));
             return None;
         }
 
@@ -375,7 +375,7 @@ pub mod windows_scanner {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
                     if let Some(err) = json.get("error") {
-                        logs.push(format!("⚠️ [Rust/C#] El helper reportó error: {}", err));
+                        logs.push(format!("[AVISO] [Rust/C#] El helper reportó error: {}", err));
                         return None;
                     }
 
@@ -390,7 +390,7 @@ pub mod windows_scanner {
                             
                             let full_path = songs_dir.join(&folder).join(&file);
                             if full_path.exists() {
-                                logs.push(format!("🎉 [Rust/C#] ¡Mapa activo extraído con Helper!: {} / {}", folder, file));
+                                logs.push(format!("[OK] [Rust/C#] ¡Mapa activo extraído con Helper!: {} / {}", folder, file));
                                 return Some(OsuDetectedBeatmap {
                                     path: full_path.to_string_lossy().to_string(),
                                     folder_name: folder,
@@ -400,16 +400,16 @@ pub mod windows_scanner {
                                     version: None,
                                 });
                             } else {
-                                logs.push(format!("⚠️ [Rust/C#] El helper encontró el mapa pero no existe en disco: {:?}", full_path));
+                                logs.push(format!("[AVISO] [Rust/C#] El helper encontró el mapa pero no existe en disco: {:?}", full_path));
                             }
                         }
                     }
                 } else {
-                    logs.push(format!("⚠️ [Rust/C#] No se pudo parsear el JSON del helper: {}", stdout));
+                    logs.push(format!("[AVISO] [Rust/C#] No se pudo parsear el JSON del helper: {}", stdout));
                 }
             },
             Err(e) => {
-                logs.push(format!("⚠️ [Rust/C#] Falló la ejecución de osu-detector.exe: {}", e));
+                logs.push(format!("[AVISO] [Rust/C#] Falló la ejecución de osu-detector.exe: {}", e));
             }
         }
         None
@@ -418,7 +418,7 @@ pub mod windows_scanner {
     /// Detector final: Intenta por Ventana, luego usa escáner asíncrono en Memoria
     pub fn detect_current_osu_beatmap() -> OsuDetectResponse {
         let mut logs = Vec::new();
-        logs.push("🔍 [Rust] Escaneando estado de osu!...".into());
+        logs.push("[BUSQUEDA] [Rust] Escaneando estado de osu!...".into());
 
         let pid = match find_osu_pid(&mut logs) {
             Some(pid) => pid,
@@ -434,7 +434,7 @@ pub mod windows_scanner {
             return OsuDetectResponse { map: Some(map), logs };
         }
 
-        logs.push("🔍 [Rust] Ventana no sirvió, iniciando lector de memoria (RAM)...".into());
+        logs.push("[BUSQUEDA] [Rust] Ventana no sirvió, iniciando lector de memoria (RAM)...".into());
         let map = scan_osu_memory(pid, &mut logs);
         
         OsuDetectResponse { map, logs }

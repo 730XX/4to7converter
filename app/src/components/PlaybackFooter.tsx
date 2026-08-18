@@ -139,12 +139,7 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
         onClick={handleTimelineClick}
         title="Hacé clic para navegar en la canción"
       >
-        <canvas
-          ref={canvasRef}
-          className="timeline-density-canvas"
-          width={600}
-          height={26}
-        />
+        <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
         <input
           className="preview-slider timeline-density-slider"
           type="range"

@@ -114,13 +114,13 @@ describe("convertBeatmap", () => {
     ]);
   });
 
-  it("throws ConversionError with code 2001 when a source column has no lane map entry", () => {
+  it("throws SourceKeyCountMismatch when a source column has no lane map entry", () => {
     expect(() =>
       convertBeatmap(buildBeatmap([buildCircle(3, 1000)]), {
         laneMap: createLaneMap([[0], [1], [2]], 7),
         targetKeyCount: 7,
       }),
-    ).toThrowError(expect.objectContaining({ code: 2001 }));
+    ).toThrowError(expect.objectContaining({ code: 2004 }));
   });
 
   it("throws ConversionError with code 2002 when a target column is out of range", () => {
@@ -153,5 +153,22 @@ describe("convertBeatmap", () => {
 
     const chord = converted.hitObjects.filter((hitObject) => hitObject.timeMs === 4000);
     expect(chord.map((hitObject) => hitObject.column)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("throws SourceKeyCountMismatch when the lane map does not cover the source key count", () => {
+    const sevenKeyBeatmap: OsuBeatmap = {
+      formatVersion: 14,
+      keyCount: 7,
+      audioFilename: "test.mp3",
+      timingPoints: [],
+      hitObjects: [buildCircle(6, 1000)],
+    };
+
+    expect(() =>
+      convertBeatmap(sevenKeyBeatmap, {
+        laneMap: createLaneMap([[0, 1], [2, 3], [4], [5, 6]], 7),
+        targetKeyCount: 7,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 2004 }));
   });
 });

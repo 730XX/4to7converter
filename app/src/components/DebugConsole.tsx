@@ -7,11 +7,31 @@ import { appLogger, type LogEntry } from "../lib/logger";
  * Permite monitorear llamadas nativas de Rust, detección de osu!, errores y eventos en tiempo real.
  */
 export function DebugConsole() {
+  const [isVisible, setIsVisible] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState<string>("");
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Escuchar atajo secreto Ctrl + Shift + D para habilitar/deshabilitar la consola
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        setIsVisible((prev) => {
+          const next = !prev;
+          if (next) {
+            setIsOpen(true);
+          }
+          return next;
+        });
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     return appLogger.subscribe((nextLogs) => {
@@ -20,10 +40,10 @@ export function DebugConsole() {
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isVisible && isOpen) {
       endRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [logs, isOpen]);
+  }, [logs, isOpen, isVisible]);
 
   function handleCopy(): void {
     const text = logs
@@ -39,6 +59,10 @@ export function DebugConsole() {
       l.message.toLowerCase().includes(filter.toLowerCase()) ||
       (l.source && l.source.toLowerCase().includes(filter.toLowerCase())),
   );
+
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <div className={`debug-console-wrapper${isOpen ? " is-open" : ""}`}>

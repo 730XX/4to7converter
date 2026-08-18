@@ -102,3 +102,28 @@ export async function detectOsuBeatmap(): Promise<OsuDetectedBeatmap | null> {
     return null;
   }
 }
+
+/** Información de cada dificultad descubierta en la carpeta del beatmap. */
+export interface BeatmapDiffItem {
+  path: string;
+  file_name: string;
+  version: string;
+  mode: number;
+  key_count: number;
+}
+
+/**
+ * Obtiene la lista de todas las dificultades (.osu) pertenecientes al mismo mapset.
+ */
+export async function listBeatmapDifficulties(path: string): Promise<BeatmapDiffItem[]> {
+  if (!isTauri()) {
+    return [];
+  }
+  try {
+    return await invoke<BeatmapDiffItem[]>("list_beatmap_difficulties", { path });
+  } catch (error) {
+    console.error("Error al listar dificultades:", error);
+    return [];
+  }
+}
+

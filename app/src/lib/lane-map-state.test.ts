@@ -35,12 +35,7 @@ describe("createDefaultLaneMapState", () => {
 describe("toggleTargetColumn", () => {
   it("adds a target column when it is absent", () => {
     const next = toggleTargetColumn(createDefaultLaneMapState(), 2, 5);
-    expect(next).toEqual([
-      [0, 1],
-      [2, 3],
-      [4, 5],
-      [6],
-    ]);
+    expect(next).toEqual([[0, 1], [2, 3], [4, 5], [6]]);
   });
 
   it("removes a target column when it is present", () => {
