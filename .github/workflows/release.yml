@@ -1,0 +1,82 @@
+name: "Publicar Release"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "windows-latest"
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Caché de Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./app/src-tauri -> target"
+
+      - name: Instalar dependencias frontend
+        run: |
+          npm ci || npm install
+          npm --prefix app ci || npm --prefix app install
+
+      - name: Extraer notas de versión desde CHANGELOG.md
+        id: changelog_reader
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Buscando notas para la versión: $VERSION"
+          
+          # Extraer el contenido entre el encabezado de esta versión y el siguiente
+          python - <<EOF > release_notes.md
+          import re, sys
+
+          version = "$VERSION"
+          try:
+              with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+                  content = f.read()
+
+              pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
+              match = re.search(pattern, content, re.DOTALL)
+              if match:
+                  notes = match.group(1).strip()
+                  print(notes)
+              else:
+                  print(f"Notas de la versión v{version}")
+          except Exception as e:
+              print(f"Notas de la versión v{version}")
+          EOF
+
+      - name: Compilar y publicar Release con Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "./app"
+          tagName: ${{ github.ref_name }}
+          releaseName: "v__VERSION__"
+          releaseBodyFile: "release_notes.md"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -129,6 +129,14 @@ git add CHANGELOG.md package.json app/src-tauri/Cargo.toml app/src-tauri/tauri.c
 git commit -m "chore(release): bump vX.Y.Z"
 ```
 
+#### Publicación Automática de Release (GitHub Actions)
+Una vez hecho el commit y push a `main`, proponer la creación del tag para disparar el flujo de compilación y publicación de instaladores en GitHub:
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+*Esto activará el workflow `.github/workflows/release.yml`, el cual compila los instaladores (`.exe`, `.msi`) y publica el release con el changelog de forma 100% automatizada.*
+
 ---
 
 ## Criterios de Éxito de la Ejecución
@@ -136,3 +144,4 @@ git commit -m "chore(release): bump vX.Y.Z"
 - [ ] Las versiones en `Cargo.toml`, `package.json` y `tauri.conf.json` están 100% sincronizadas.
 - [ ] El `CHANGELOG.md` contiene explicaciones técnicas precisas organizadas por categorías.
 - [ ] Se proporcionan comandos listos para copiar con formato Conventional Commits impecable.
+- [ ] Se incluye el comando de creación de tag (`git tag vX.Y.Z && git push origin vX.Y.Z`) para la publicación automática.
