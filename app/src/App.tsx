@@ -14,6 +14,7 @@ import { IssuesPanel } from "./components/IssuesPanel";
 import { LaneMapper } from "./components/LaneMapper";
 import { PlaybackFooter } from "./components/PlaybackFooter";
 import { Playfield } from "./components/Playfield";
+import { QuickSearchModal } from "./components/QuickSearchModal";
 import { QuickToastOsd, type OsdState } from "./components/QuickToastOsd";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { StatsBar } from "./components/StatsBar";
@@ -36,7 +37,14 @@ import {
   type LaneMapState,
 } from "./lib/lane-map-state";
 import { loadSettings, saveSettings, type UserSettings } from "./lib/settings";
-import { deletePreset, loadPresets, savePreset, type LanePreset } from "./lib/lane-presets";
+import {
+  deletePreset,
+  loadActiveLaneMapState,
+  loadPresets,
+  saveActiveLaneMapState,
+  savePreset,
+  type LanePreset,
+} from "./lib/lane-presets";
 import { usePlayback } from "./lib/use-playback";
 
 const TARGET_KEY_COUNT = 7;
@@ -60,13 +68,17 @@ export default function App() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [source, setSource] = useState<OsuBeatmap | null>(null);
   const [loadError, setLoadError] = useState<LoadError | null>(null);
-  const [laneMapState, setLaneMapState] = useState<LaneMapState>(createDefaultLaneMapState);
+  const [laneMapState, setLaneMapState] = useState<LaneMapState>(
+    () => loadActiveLaneMapState() ?? createDefaultLaneMapState(),
+  );
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [difficulties, setDifficulties] = useState<BeatmapDiffItem[]>([]);
+  const [zeroLn, setZeroLn] = useState<boolean>(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
   const [presets, setPresets] = useState<LanePreset[]>(() => loadPresets());
   const [osd, setOsd] = useState<OsdState | null>(null);
@@ -86,6 +98,10 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
+  useEffect(() => {
+    saveActiveLaneMapState(laneMapState);
+  }, [laneMapState]);
+
   const playbackRef = useRef<PlaybackControls | null>(null);
 
   // Atajos de teclado y combinaciones con rueda de ratón
@@ -94,6 +110,13 @@ export default function App() {
       // Prevenir que Windows robe el foco activando el menú nativo con la tecla Alt
       if (event.key === "Alt") {
         event.preventDefault();
+      }
+
+      // Ctrl + P: Búsqueda rápida estilo PowerToys Run (activo incluso si hay foco en inputs)
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setIsQuickSearchOpen((prev) => !prev);
+        return;
       }
 
       // Ignorar si el usuario está escribiendo en un input
@@ -188,10 +211,15 @@ export default function App() {
         return;
       }
 
+      // Si la búsqueda rápida, opciones o modales están abiertos, permitir scroll normal del contenedor
+      if (isQuickSearchOpen || isFileModalOpen || isSettingsOpen) {
+        return;
+      }
+
       // 4. Rueda normal (sin modificadores): Navegación temporal en el mapa (Seek)
       // Hacia arriba (deltaY < 0): retroceder | Hacia abajo (deltaY > 0): adelantar
       const isInsideScrollable = (event.target as HTMLElement | null)?.closest?.(
-        ".app-sidebar, .settings-content, .debug-console-body, .modal-dialog",
+        ".app-sidebar, .settings-content, .debug-console-body, .modal-dialog, .quick-search-results, .quick-search-dialog",
       );
 
       if (!isInsideScrollable && playbackRef.current) {
@@ -226,8 +254,23 @@ export default function App() {
     };
   }, []);
 
+  function isSameSongFolder(pathA: string | null, pathB: string | null): boolean {
+    if (!pathA || !pathB) return false;
+    const cleanA = pathA.replace(/\\/g, "/").toLowerCase();
+    const cleanB = pathB.replace(/\\/g, "/").toLowerCase();
+    const dirA = cleanA.slice(0, cleanA.lastIndexOf("/"));
+    const dirB = cleanB.slice(0, cleanB.lastIndexOf("/"));
+    return dirA === dirB && dirA.length > 0;
+  }
+
   async function handlePathSelected(path: string): Promise<void> {
     try {
+      const isDiffChange = isSameSongFolder(sourcePath, path);
+      if (!isDiffChange) {
+        playbackRef.current?.pause();
+        playbackRef.current?.seekTo(0);
+      }
+
       const { content, audioPath, backgroundPath } = await loadBeatmapWithAudio(path);
       const parsed = parseOsuFile(content);
       setSource(parsed);
@@ -236,7 +279,6 @@ export default function App() {
       setLoadError(null);
       setAudioUrl(audioPath === null ? null : toAudioUrl(audioPath));
       setBackgroundUrl(backgroundPath === null ? null : toAssetUrl(backgroundPath));
-      setLaneMapState(createDefaultLaneMapState());
       setIsFileModalOpen(false);
 
       // Cargar lista de todas las dificultades del mapset
@@ -268,6 +310,9 @@ export default function App() {
 
   async function handleFileSelected(file: File): Promise<void> {
     try {
+      playbackRef.current?.pause();
+      playbackRef.current?.seekTo(0);
+
       const content = await file.text();
       const parsed = parseOsuFile(content);
       setSource(parsed);
@@ -276,7 +321,6 @@ export default function App() {
       setDifficulties([]);
       setLoadError(null);
       setAudioUrl(null);
-      setLaneMapState(createDefaultLaneMapState());
       setIsFileModalOpen(false);
     } catch (error) {
       if (error instanceof OsuParseError || error instanceof ConversionError) {
@@ -293,6 +337,9 @@ export default function App() {
   }
 
   function handleReset(): void {
+    playbackRef.current?.pause();
+    playbackRef.current?.seekTo(0);
+
     if (audioUrl !== null) {
       URL.revokeObjectURL(audioUrl);
     }
@@ -313,8 +360,9 @@ export default function App() {
         : convertBeatmap(source, {
             laneMap: toLaneMap(laneMapState),
             targetKeyCount: TARGET_KEY_COUNT,
+            zeroLn,
           }),
-    [source, laneMapState],
+    [source, laneMapState, zeroLn],
   );
 
   const issues = useMemo<ConversionIssue[]>(
@@ -418,29 +466,45 @@ export default function App() {
 
   if (loadError !== null) {
     return (
-      <main className="app-shell">
-        <section className="error-card">
-          <h1 className="error-card-title">No se pudo leer el archivo</h1>
-          <p className="error-card-message">{loadError.message}</p>
-          <span className="error-card-code mono">Error {loadError.code}</span>
-          <button type="button" className="ghost-button" onClick={handleReset}>
-            Elegir otro archivo
-          </button>
-        </section>
-        <DebugConsole />
-      </main>
+      <>
+        <main className="app-shell">
+          <section className="error-card">
+            <h1 className="error-card-title">No se pudo leer el archivo</h1>
+            <p className="error-card-message">{loadError.message}</p>
+            <span className="error-card-code mono">Error {loadError.code}</span>
+            <button type="button" className="ghost-button" onClick={handleReset}>
+              Elegir otro archivo
+            </button>
+          </section>
+          <DebugConsole />
+        </main>
+        <QuickSearchModal
+          isOpen={isQuickSearchOpen}
+          onClose={() => setIsQuickSearchOpen(false)}
+          onSelectBeatmap={(path) => void handlePathSelected(path)}
+          currentBeatmapPath={sourcePath}
+        />
+      </>
     );
   }
 
   if (source === null || converted === null || fileName === null) {
     return (
-      <main className="app-shell">
-        <FileDropZone
-          onPathSelected={(path) => void handlePathSelected(path)}
-          onFileSelected={(file) => void handleFileSelected(file)}
+      <>
+        <main className="app-shell">
+          <FileDropZone
+            onPathSelected={(path) => void handlePathSelected(path)}
+            onFileSelected={(file) => void handleFileSelected(file)}
+          />
+          <DebugConsole />
+        </main>
+        <QuickSearchModal
+          isOpen={isQuickSearchOpen}
+          onClose={() => setIsQuickSearchOpen(false)}
+          onSelectBeatmap={(path) => void handlePathSelected(path)}
+          currentBeatmapPath={sourcePath}
         />
-        <DebugConsole />
-      </main>
+      </>
     );
   }
 
@@ -450,7 +514,7 @@ export default function App() {
         <div
           className="app-backdrop"
           style={{
-            backgroundImage: `url(${backgroundUrl})`,
+            backgroundImage: `url("${backgroundUrl.replace(/"/g, '\\"')}")`,
             filter: `blur(28px) brightness(${Math.max(0.05, 1 - settings.backdropDim / 100)})`,
           }}
           aria-hidden="true"
@@ -476,10 +540,16 @@ export default function App() {
               audioUrl={audioUrl}
               sourcePath={sourcePath}
               difficulties={difficulties}
+              zeroLn={zeroLn}
+              onToggleZeroLn={setZeroLn}
               onSelectDifficulty={(newPath) => void handlePathSelected(newPath)}
               onOpenNewFile={() => {
                 playback.pause();
                 setIsFileModalOpen(true);
+              }}
+              onOpenQuickSearch={() => {
+                playback.pause();
+                setIsQuickSearchOpen(true);
               }}
             />
             <LaneMapper
@@ -522,6 +592,13 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={setSettings}
+      />
+
+      <QuickSearchModal
+        isOpen={isQuickSearchOpen}
+        onClose={() => setIsQuickSearchOpen(false)}
+        onSelectBeatmap={(path) => void handlePathSelected(path)}
+        currentBeatmapPath={sourcePath}
       />
 
       <QuickToastOsd osd={osd} />

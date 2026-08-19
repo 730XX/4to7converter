@@ -130,10 +130,10 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         }
         audioDurationRef.current = duration;
         syncDuration();
-        if (isPlayingRef.current) {
-          player.seek(currentTimeMsRef.current);
-          void player.play();
-        }
+        stopPlayback();
+        currentTimeMsRef.current = 0;
+        hitsoundLastCheckedRef.current = 0;
+        setTimerTimeMs(0);
       })
       .catch(() => {
         if (cancelled) {
@@ -141,6 +141,10 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         }
         audioDurationRef.current = null;
         syncDuration();
+        stopPlayback();
+        currentTimeMsRef.current = 0;
+        hitsoundLastCheckedRef.current = 0;
+        setTimerTimeMs(0);
       });
     return () => {
       cancelled = true;
@@ -155,10 +159,33 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
-      if (event.code === "Space") {
-        event.preventDefault();
-        togglePlay();
+      if (event.code !== "Space") {
+        return;
       }
+
+      // Solo ignorar la tecla Espacio si el usuario está tipeando texto en un campo editable
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const isTextInput =
+          (target instanceof HTMLInputElement &&
+            ["text", "search", "password", "email", "url", "number"].includes(target.type || "text")) ||
+          target instanceof HTMLTextAreaElement ||
+          target.isContentEditable;
+
+        if (isTextInput) {
+          return;
+        }
+      }
+
+      // Evitar que la barra espaciadora haga scroll de la página o active botones secundarios
+      event.preventDefault();
+
+      // Desenfocar elementos no textuales (sliders de timeline, selects, botones) para mantener el foco limpio
+      if (target && typeof target.blur === "function" && target !== document.body) {
+        target.blur();
+      }
+
+      togglePlay();
     }
 
     function frame(now: number): void {
@@ -187,18 +214,26 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
           }
         }
 
-        // Detección determinista de hitsounds: cada nota cuyo tiempo cae en el
-        // intervalo recién recorrido dispara un hit. El guard de 500 ms evita
-        // una ráfaga de hits tras un seek o restart.
+        // Detección determinista de hitsounds con escalamiento gradual para acordes (chords).
+        // Si caen varias notas en el mismo instante, no se satura el audio 7 veces:
+        // Se reproduce un único golpe nítido aumentando gradualmente (+25% por nota adicional).
         const hitDelta = currentTimeMsRef.current - hitsoundLastCheckedRef.current;
         if (hitsoundsEnabledRef.current && hitDelta > 0 && hitDelta < 500) {
+          let hitCount = 0;
           for (const hitObject of beatmapRef.current.hitObjects) {
             if (
               hitObject.timeMs > hitsoundLastCheckedRef.current &&
               hitObject.timeMs <= currentTimeMsRef.current
             ) {
-              hitSoundEngine.playHit(hitsoundVolumeRef.current / 100);
+              hitCount++;
             }
+          }
+          if (hitCount > 0) {
+            const baseVol = hitsoundVolumeRef.current / 100;
+            const chordMultiplier = 1 + Math.min(hitCount - 1, 6) * 0.30;
+            //const effectiveVol = Math.min(1.0, baseVol * chordMultiplier);
+            const  effectiveVol = (baseVol * chordMultiplier)
+            hitSoundEngine.playHit(effectiveVol);
           }
         }
       }

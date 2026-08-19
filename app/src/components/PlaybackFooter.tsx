@@ -43,7 +43,43 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
     return bins;
   }, [beatmap, playback.durationMs]);
 
-  // Dibujar el histograma de densidad y la posición de reproducción
+  // Calcular intervalos de Kiai Time desde [TimingPoints]
+  const kiaiIntervals = useMemo(() => {
+    if (!beatmap || !beatmap.timingPoints || beatmap.timingPoints.length === 0) {
+      return [] as Array<{ startMs: number; endMs: number }>;
+    }
+
+    // Ordenar puntos de timing temporalmente
+    const sorted = [...beatmap.timingPoints].sort((a, b) => a.offsetMs - b.offsetMs);
+    const intervals: Array<{ startMs: number; endMs: number }> = [];
+    let currentKiaiStart: number | null = null;
+    const duration = playback.durationMs;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const tp = sorted[i];
+      const isKiai = (tp.effects & 1) === 1;
+
+      if (isKiai && currentKiaiStart === null) {
+        currentKiaiStart = Math.max(0, tp.offsetMs);
+      } else if (!isKiai && currentKiaiStart !== null) {
+        const end = Math.max(currentKiaiStart, tp.offsetMs);
+        intervals.push({ startMs: currentKiaiStart, endMs: end });
+        currentKiaiStart = null;
+      }
+    }
+
+    // Si el último punto quedó con Kiai activo, extender hasta el final de la canción
+    if (currentKiaiStart !== null) {
+      intervals.push({
+        startMs: currentKiaiStart,
+        endMs: Math.max(currentKiaiStart, duration),
+      });
+    }
+
+    return intervals;
+  }, [beatmap, playback.durationMs]);
+
+  // Dibujar el histograma de densidad, kiai tracks y la posición de reproducción
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -58,19 +94,19 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
     const maxDensity = Math.max(...densityHistogram, 1);
     const barWidth = width / DENSITY_BINS;
 
-    // Dibujar barras de densidad
+    // 1. Dibujar barras de densidad
     for (let i = 0; i < DENSITY_BINS; i++) {
       const count = densityHistogram[i] ?? 0;
-      const barHeight = Math.max(2, (count / maxDensity) * (height - 6));
+      const barHeight = Math.max(2, (count / maxDensity) * (height - 8));
       const x = i * barWidth;
-      const y = height - barHeight;
+      const y = height - barHeight - 2;
 
       // Gradiente suave según la intensidad de notas
       const intensity = count / maxDensity;
       if (intensity > 0.6) {
-        ctx.fillStyle = "rgba(163, 255, 56, 0.75)"; // Neón verde/amarillo para zonas densas
+        ctx.fillStyle = "rgba(250, 170, 212, 0.85)"; // #faaad4 (intensidad alta)
       } else if (intensity > 0.25) {
-        ctx.fillStyle = "rgba(91, 140, 255, 0.65)"; // Azul acento
+        ctx.fillStyle = "rgba(247, 236, 0, 0.75)"; // #f7ec00 (intensidad media)
       } else if (count > 0) {
         ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
       } else {
@@ -80,21 +116,47 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
       ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
     }
 
-    // Progreso actual (aguja y zona reproducida)
+    // 2. Dibujar Kiai Track (Franja #905921 semitransparente de 6px en el borde inferior)
+    if (playback.durationMs > 0 && kiaiIntervals.length > 0) {
+      const duration = playback.durationMs;
+      const kiaiHeight = 6;
+      const kiaiY = -4;
+
+      for (const interval of kiaiIntervals) {
+        const startX = Math.max(0, (interval.startMs / duration) * width);
+        const endX = Math.min(width, (interval.endMs / duration) * width);
+        const trackWidth = Math.max(2, endX - startX);
+
+        ctx.save();
+        ctx.fillStyle = "rgba(144, 89, 33, 0.75)"; // #905921 semi-transparente
+        ctx.fillRect(startX, kiaiY, trackWidth, kiaiHeight);
+        ctx.restore();
+      }
+    }
+
+    // 3. Progreso actual (aguja)
     if (playback.durationMs > 0) {
       const progress = Math.min(1, Math.max(0, playback.timerTimeMs / playback.durationMs));
       const needleX = progress * width;
 
-      // Sombra/resplandor en la aguja
+      // Detectar si el momento actual está en Kiai para darle acento a la aguja
+      const isInKiai = kiaiIntervals.some(
+        (k) => playback.timerTimeMs >= k.startMs && playback.timerTimeMs <= k.endMs,
+      );
+
+      ctx.save();
       ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "#5b8cff";
-      ctx.shadowBlur = 6;
+      ctx.shadowColor = isInKiai ? "#905921" : "#f7ec00";
+      ctx.shadowBlur = isInKiai ? 8 : 5;
       ctx.fillRect(needleX - 1, 0, 2, height);
-      ctx.shadowBlur = 0;
+      ctx.restore();
     }
-  }, [densityHistogram, playback.timerTimeMs, playback.durationMs]);
+  }, [densityHistogram, kiaiIntervals, playback.timerTimeMs, playback.durationMs]);
 
   function handleTimelineClick(event: MouseEvent<HTMLDivElement>): void {
+    if ((event.target as HTMLElement).tagName === "INPUT") {
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
@@ -137,7 +199,6 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
       <div
         className="timeline-density-wrapper"
         onClick={handleTimelineClick}
-        title="Hacé clic para navegar en la canción"
       >
         <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
         <input
@@ -148,13 +209,20 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
           step={1}
           value={Math.min(playback.timerTimeMs, playback.durationMs)}
           onChange={handleSeek}
+          onPointerUp={(e) => (e.target as HTMLElement).blur()}
           aria-label="Posición de reproducción"
         />
       </div>
 
       <label className="preview-speed">
         <span>Velocidad</span>
-        <select value={playback.speed} onChange={handleSpeedChange}>
+        <select
+          value={playback.speed}
+          onChange={(e) => {
+            e.target.blur();
+            handleSpeedChange(e);
+          }}
+        >
           {SPEED_OPTIONS.map((option) => (
             <option key={option} value={option}>
               {option}×

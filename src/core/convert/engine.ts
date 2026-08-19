@@ -1,4 +1,5 @@
 import type { HitObject, OsuBeatmap } from "../osu/types.js";
+import { HIT_TYPE_CIRCLE } from "../osu/types.js";
 import { ConversionError, ConversionErrorCode } from "./errors.js";
 import { assertValidLaneMap, type LaneMap } from "./lane-map.js";
 
@@ -8,27 +9,26 @@ export interface ConvertBeatmapOptions {
   laneMap: LaneMap;
   /** Cantidad de teclas del beatmap destino. */
   targetKeyCount: number;
+  /** Convierte todas las notas largas (Hold Notes / LN) a notas simples (Rice). */
+  zeroLn?: boolean;
 }
 
 /**
  * Convierte un beatmap de osu!mania proyectando cada nota a través del lane map.
- *
- * La división se aplica por nota: cada nota fuente genera una copia por
- * columna destino, incluidas las notas dentro de un acorde y las hold notes.
- * El resultado se ordena por tiempo, columna y tipo.
+ * Si zeroLn está activo, convierte todas las Hold Notes en Rice notes.
  *
  * @param beatmap - El beatmap de origen a convertir.
- * @param options - Opciones de conversión con el lane map y las teclas destino.
+ * @param options - Opciones de conversión con el lane map, teclas destino y zeroLn.
  * @returns Un nuevo beatmap con la cantidad de teclas destino y las notas proyectadas.
  * @throws {ConversionError} Con un código numérico estable cuando el lane map es inválido.
  */
 export function convertBeatmap(beatmap: OsuBeatmap, options: ConvertBeatmapOptions): OsuBeatmap {
-  const { laneMap, targetKeyCount } = options;
+  const { laneMap, targetKeyCount, zeroLn } = options;
   assertValidLaneMap(laneMap.sourceColumnToTargetColumns, targetKeyCount);
   assertLaneMapCoversSourceColumns(beatmap, laneMap);
 
   const hitObjects = beatmap.hitObjects
-    .flatMap((hitObject) => projectHitObject(hitObject, laneMap))
+    .flatMap((hitObject) => projectHitObject(hitObject, laneMap, zeroLn))
     .sort(compareHitObjects);
 
   return {
@@ -40,15 +40,7 @@ export function convertBeatmap(beatmap: OsuBeatmap, options: ConvertBeatmapOptio
 
 /**
  * Verifica que el lane map cubra todas las columnas que usa el beatmap fuente
- * antes de proyectar. Sin esta guardia, una nota de una columna sin mapeo
- * lanza un error a mitad de la proyección con un mensaje que no nombra la
- * causa real. La comparación es contra la columna máxima usada por las notas,
- * no contra el keyCount, para permitir lane maps parciales.
- *
- * @param beatmap - El beatmap fuente a convertir.
- * @param laneMap - El lane map que define las columnas destino.
- * @throws {ConversionError} Con código {@link ConversionErrorCode.SourceKeyCountMismatch}
- * cuando alguna nota cae en una columna fuera de la cobertura del lane map.
+ * antes de proyectar.
  */
 function assertLaneMapCoversSourceColumns(beatmap: OsuBeatmap, laneMap: LaneMap): void {
   const coveredSourceColumns = laneMap.sourceColumnToTargetColumns.length;
@@ -68,19 +60,8 @@ function assertLaneMapCoversSourceColumns(beatmap: OsuBeatmap, laneMap: LaneMap)
 
 /**
  * Proyecta un hit object fuente a sus copias por columna destino.
- *
- * Cuando la columna fuente no tiene entrada en el lane map (o su lista está
- * vacía) lanza {@link ConversionError}. En caso contrario devuelve una copia
- * por columna destino preservando tiempo, tipo, tiempo de fin, hit sound y hit
- * sample; solo cambia la columna.
- *
- * @param hitObject - El hit object fuente a proyectar.
- * @param laneMap - El lane map que define las columnas destino.
- * @returns Una copia del hit object por cada columna destino.
- * @throws {ConversionError} Con código {@link ConversionErrorCode.EmptyLaneMapping}
- * cuando la columna fuente no tiene columnas destino.
  */
-function projectHitObject(hitObject: HitObject, laneMap: LaneMap): HitObject[] {
+function projectHitObject(hitObject: HitObject, laneMap: LaneMap, zeroLn?: boolean): HitObject[] {
   const targetColumns = laneMap.sourceColumnToTargetColumns[hitObject.column];
   if (targetColumns === undefined || targetColumns.length === 0) {
     throw new ConversionError(
@@ -89,11 +70,15 @@ function projectHitObject(hitObject: HitObject, laneMap: LaneMap): HitObject[] {
     );
   }
 
+  const isZeroLn = Boolean(zeroLn);
+  const type = isZeroLn ? HIT_TYPE_CIRCLE : hitObject.type;
+  const endTimeMs = isZeroLn ? null : hitObject.endTimeMs;
+
   return targetColumns.map((column) => ({
     column,
     timeMs: hitObject.timeMs,
-    type: hitObject.type,
-    endTimeMs: hitObject.endTimeMs,
+    type,
+    endTimeMs,
     hitSound: hitObject.hitSound,
     hitSample: hitObject.hitSample,
   }));
@@ -101,10 +86,6 @@ function projectHitObject(hitObject: HitObject, laneMap: LaneMap): HitObject[] {
 
 /**
  * Compara dos hit objects para ordenarlos por tiempo, luego columna y luego tipo.
- *
- * @param first - El primer hit object a comparar.
- * @param second - El segundo hit object a comparar.
- * @returns Un número negativo, cero o positivo según el orden relativo.
  */
 export function compareHitObjects(first: HitObject, second: HitObject): number {
   if (first.timeMs !== second.timeMs) {

@@ -127,3 +127,47 @@ export async function listBeatmapDifficulties(path: string): Promise<BeatmapDiff
   }
 }
 
+export interface BeatmapSearchItem {
+  path: string;
+  title: string;
+  artist: string;
+  creator: string;
+  folder_name: string;
+  diff_count: number;
+  key_modes: string[];
+  preview_version: string;
+}
+
+/**
+ * Busca beatmaps por nombre, artista o dificultad en la carpeta Songs de osu!.
+ */
+export async function searchBeatmaps(
+  query: string,
+  basePath?: string | null,
+): Promise<BeatmapSearchItem[]> {
+  if (!isTauri() || !query.trim()) {
+    return [];
+  }
+  try {
+    return await invoke<BeatmapSearchItem[]>("search_beatmaps", {
+      query: query.trim(),
+      basePath: basePath ?? null,
+    });
+  } catch (error) {
+    console.error("Error al buscar beatmaps:", error);
+    return [];
+  }
+}
+
+/**
+ * Invalida el caché del índice de búsqueda para forzar un rebuild en la próxima consulta.
+ * Usar cuando se sabe que la carpeta Songs cambió (ej: descarga de nuevos mapas).
+ */
+export async function invalidateSearchIndex(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    await invoke("invalidate_search_index");
+  } catch (error) {
+    console.error("Error al invalidar el índice de búsqueda:", error);
+  }
+}

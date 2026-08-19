@@ -1,6 +1,6 @@
 [package]
 name = "osu-4to7-converter"
-version = "0.1.0"
+version = "0.3.0"
 description = "Convertidor de beatmaps osu!mania de 4k a 7k"
 authors = ["resta"]
 license = "MIT"

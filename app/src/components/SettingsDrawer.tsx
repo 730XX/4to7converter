@@ -318,6 +318,10 @@ export function SettingsDrawer({
                 <kbd className="shortcut-kbd mono">Espacio</kbd>
               </div>
               <div className="settings-shortcut-row">
+                <span className="shortcut-desc">Búsqueda rápida de mapas</span>
+                <kbd className="shortcut-kbd mono">Ctrl + P</kbd>
+              </div>
+              <div className="settings-shortcut-row">
                 <span className="shortcut-desc">Abrir / Cerrar Opciones</span>
                 <kbd className="shortcut-kbd mono">Ctrl + O</kbd>
               </div>

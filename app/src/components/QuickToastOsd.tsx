@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Gauge, Volume2 } from "lucide-react";
 
 export interface OsdState {
@@ -16,16 +17,41 @@ interface QuickToastOsdProps {
 
 /**
  * Toast flotante HUD unificado tipo cápsula / control center
- * Muestra volumen, velocidad de scroll y confirmaciones de exportación elegantes.
+ * Muestra volumen, velocidad de scroll y confirmaciones de exportación elegantes con animación de entrada y salida.
  */
 export function QuickToastOsd({ osd }: QuickToastOsdProps) {
-  if (!osd) {
+  const [renderedOsd, setRenderedOsd] = useState<OsdState | null>(osd);
+  const [isClosing, setIsClosing] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (osd) {
+      if (closeTimerRef.current !== null) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setRenderedOsd(osd);
+      setIsClosing(false);
+    } else if (renderedOsd && !isClosing) {
+      // Iniciar animación de salida
+      setIsClosing(true);
+      closeTimerRef.current = window.setTimeout(() => {
+        setRenderedOsd(null);
+        setIsClosing(false);
+        closeTimerRef.current = null;
+      }, 160); // Duración de osdSlideOutLeft
+    }
+  }, [osd, renderedOsd, isClosing]);
+
+  if (!renderedOsd) {
     return null;
   }
 
-  if (osd.type === "export") {
+  const closingClass = isClosing ? " is-closing" : "";
+
+  if (renderedOsd.type === "export") {
     return (
-      <div className="osd-pill-toast" role="status" aria-live="polite">
+      <div className={`osd-pill-toast${closingClass}`} role="status" aria-live="polite">
         <div className="osd-icon" style={{ color: "var(--color-success, #22c55e)" }}>
           <CheckCircle2 size={18} />
         </div>
@@ -59,13 +85,13 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
     );
   }
 
-  if (osd.type === "speed") {
-    const speed = osd.scrollSpeed ?? 25;
+  if (renderedOsd.type === "speed") {
+    const speed = renderedOsd.scrollSpeed ?? 25;
     const percentage = Math.max(0, Math.min(100, ((speed - 10) / 30) * 100));
     const displayValue = `${(speed / 10).toFixed(1)}x`;
 
     return (
-      <div className="osd-pill-toast" role="status" aria-live="polite">
+      <div className={`osd-pill-toast${closingClass}`} role="status" aria-live="polite">
         <div className="osd-icon">
           <Gauge size={16} />
         </div>
@@ -83,20 +109,20 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
   }
 
   // Tipo Audio Unificado: Música + Hitsounds
-  const musicPct = Math.max(0, Math.min(100, osd.volume ?? 0));
-  const hitPct = Math.max(0, Math.min(100, osd.hitsoundVolume ?? 0));
+  const musicPct = Math.max(0, Math.min(100, renderedOsd.volume ?? 0));
+  const hitPct = Math.max(0, Math.min(100, renderedOsd.hitsoundVolume ?? 0));
 
   return (
-    <div className="osd-pill-toast osd-pill-toast--dual" role="status" aria-live="polite">
+    <div className={`osd-pill-toast osd-pill-toast--dual${closingClass}`} role="status" aria-live="polite">
       {/* Fila de Música */}
-      <div className={`osd-dual-row${osd.activeParam === "music" ? " is-active" : ""}`}>
+      <div className={`osd-dual-row${renderedOsd.activeParam === "music" ? " is-active" : ""}`}>
         <div className="osd-icon">
           <Volume2 size={15} />
         </div>
         <div className="osd-content">
           <div className="osd-label-row">
             <span className="osd-title">Música</span>
-            <span className="osd-value mono">{Math.round(osd.volume ?? 0)}%</span>
+            <span className="osd-value mono">{Math.round(renderedOsd.volume ?? 0)}%</span>
           </div>
           <div className="osd-bar-track">
             <div className="osd-bar-fill" style={{ width: `${musicPct}%` }} />
@@ -107,14 +133,14 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
       <div className="osd-dual-divider" aria-hidden="true" />
 
       {/* Fila de Hitsounds */}
-      <div className={`osd-dual-row${osd.activeParam === "hitsound" ? " is-active" : ""}`}>
+      <div className={`osd-dual-row${renderedOsd.activeParam === "hitsound" ? " is-active" : ""}`}>
         <div className="osd-icon">
           <Bell size={15} />
         </div>
         <div className="osd-content">
           <div className="osd-label-row">
             <span className="osd-title">Hitsound</span>
-            <span className="osd-value mono">{Math.round(osd.hitsoundVolume ?? 0)}%</span>
+            <span className="osd-value mono">{Math.round(renderedOsd.hitsoundVolume ?? 0)}%</span>
           </div>
           <div className="osd-bar-track">
             <div className="osd-bar-fill osd-bar-fill--hitsound" style={{ width: `${hitPct}%` }} />

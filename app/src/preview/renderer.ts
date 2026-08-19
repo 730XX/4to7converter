@@ -19,6 +19,38 @@ export const PLAYFIELD_APPROACH_MS = 1000;
 /** Altura de una nota normal dibujada en píxeles. */
 const NOTE_HEIGHT = 16;
 
+/**
+ * Configuración visual centralizada para opacidades y efectos del renderizador.
+ * Ajusta los valores aquí para modificar el aspecto global sin tocar la lógica de dibujo.
+ */
+export const RENDER_CONFIG = {
+  notes: {
+    rice: {
+      fallingAlpha: 0.85,
+      passedAlpha: 0.0,
+    },
+    ln: {
+      /** Opacidad global de la LN mientras cae hacia la línea */
+      fallingAlpha: 0.75,
+      /** Opacidad global de la LN mientras está siendo pulsada/sostenida */
+      holdingAlpha: 0.80,
+      /** Opacidad global de la LN una vez que ya pasó su cola */
+      passedAlpha: 0.0,
+      /** Opacidad del relleno del cuerpo mientras se pulsa (0.0 a 1.0) */
+      holdingBodyOpacity: 0.50,
+      /** Opacidad del contorno lateral del cuerpo mientras se pulsa (0.0 a 1.0) */
+      holdingBorderOpacity: 0.60,
+      /** Opacidad de la línea de la cola mientras se pulsa (0.0 a 1.0) */
+      holdingTailOpacity: 0.70,
+    },
+  },
+  hitLine: {
+    beamHeight: 90,
+    /** Intensidad del haz de luz vertical cuando una LN está activa en la línea */
+    holdingBeamIntensity: 0.55,
+  },
+};
+
 /** Estructura de colores de una nota por canal */
 export interface LaneSkinColor {
   top: string;
@@ -223,8 +255,8 @@ function drawHitLine(
 
         let intensity: number;
         if (isHoldActive) {
-          // Durante la hold note se mantiene estable con brillo pulsante suave
-          intensity = 0.55;
+          // Durante la hold note se mantiene estable con brillo suave configurable
+          intensity = RENDER_CONFIG.hitLine.holdingBeamIntensity;
         } else if (timeDiff < 0) {
           // Fase 1: Fade-in suave al aproximarse a la línea
           const progress = (timeDiff + ATTACK_MS) / ATTACK_MS;
@@ -313,13 +345,21 @@ function drawNotes(
     );
     const skin = palette.laneSkins[columnIndex] ?? WHITE_SKIN;
 
-    const isPassed =
-      scrollDirection === "down" ? noteY > metrics.hitLineY : noteY < metrics.hitLineY;
-
-    ctx.globalAlpha = isPassed ? 0.35 : 1;
     if (hitObject.endTimeMs === null) {
+      // Nota normal (Rice note)
+      const isPassed =
+        scrollDirection === "down" ? noteY > metrics.hitLineY : noteY < metrics.hitLineY;
+      ctx.globalAlpha = isPassed
+        ? RENDER_CONFIG.notes.rice.passedAlpha
+        : RENDER_CONFIG.notes.rice.fallingAlpha;
       drawNoteBar(ctx, centerX, noteY, noteWidth, skin);
     } else {
+      // Hold Note (LN)
+      const isFalling = currentTimeMs < hitObject.timeMs;
+      const isHolding =
+        currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs;
+      const isFinished = currentTimeMs > hitObject.endTimeMs;
+
       const endY = getHoldEndY(
         hitObject.endTimeMs,
         currentTimeMs,
@@ -327,7 +367,21 @@ function drawNotes(
         speedPxPerMs,
         scrollDirection,
       );
-      drawHoldNoteBar(ctx, centerX, noteY, endY, noteWidth, skin);
+
+      if (isHolding) {
+        // Presionada: Color y brillo configurables
+        ctx.globalAlpha = RENDER_CONFIG.notes.ln.holdingAlpha;
+        const effectiveHeadY = metrics.hitLineY;
+        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY, noteWidth, skin, true);
+      } else if (isFalling) {
+        // Cayendo: Opacidad configurable
+        ctx.globalAlpha = RENDER_CONFIG.notes.ln.fallingAlpha;
+        drawHoldNoteBar(ctx, centerX, noteY, endY, noteWidth, skin, false);
+      } else {
+        // Ya completada / Pasada
+        ctx.globalAlpha = RENDER_CONFIG.notes.ln.passedAlpha;
+        drawHoldNoteBar(ctx, centerX, noteY, endY, noteWidth, skin, false);
+      }
     }
   }
   ctx.globalAlpha = 1;
@@ -369,19 +423,31 @@ function drawHoldNoteBar(
   tailY: number,
   noteWidth: number,
   skin: LaneSkinColor,
+  isHolding: boolean = false,
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
   const top = Math.min(headY, tailY);
   const bottom = Math.max(headY, tailY);
+  const height = Math.max(bottom - top, 1);
 
   // Cuerpo de la hold note
-  ctx.fillStyle = skin.holdBody;
-  ctx.fillRect(x + 2, top, noteWidth - 4, Math.max(bottom - top, 1));
+  ctx.fillStyle = isHolding
+    ? hexToRgba(skin.mid, RENDER_CONFIG.notes.ln.holdingBodyOpacity)
+    : skin.holdBody;
+  ctx.fillRect(x + 2, top, noteWidth - 4, height);
 
-  // Bordes laterales del cuerpo
-  ctx.fillStyle = skin.border;
-  ctx.fillRect(x + 1, top, 2, Math.max(bottom - top, 1));
-  ctx.fillRect(x + noteWidth - 3, top, 2, Math.max(bottom - top, 1));
+  // Bordes laterales sutiles del cuerpo
+  ctx.fillStyle = isHolding
+    ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingBorderOpacity)
+    : skin.border;
+  ctx.fillRect(x + 1, top, 2, height);
+  ctx.fillRect(x + noteWidth - 3, top, 2, height);
+
+  // Cola sutil de la hold note
+  ctx.fillStyle = isHolding
+    ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingTailOpacity)
+    : skin.border;
+  ctx.fillRect(x + 1, tailY - 1, noteWidth - 2, 2);
 
   // Cabeza de la nota
   drawNoteBar(ctx, centerX, headY, noteWidth, skin);

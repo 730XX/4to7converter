@@ -1,6 +1,6 @@
 {
   "name": "osu-4to7-converter",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Desktop tool to convert osu!mania 4k beatmaps to 7k with a visual lane-mapping editor.",
   "private": true,
   "type": "module",

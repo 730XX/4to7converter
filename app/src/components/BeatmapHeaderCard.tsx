@@ -1,5 +1,4 @@
-import { Check, ChevronDown, Cpu, FilePlus } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Cpu, FilePlus, Search } from "lucide-react";
 import type { OsuBeatmap } from "../../../src/core/osu/types";
 import type { BeatmapDiffItem } from "../lib/native";
 
@@ -10,14 +9,17 @@ interface BeatmapHeaderCardProps {
   audioUrl: string | null;
   sourcePath: string | null;
   difficulties?: BeatmapDiffItem[];
+  zeroLn: boolean;
+  onToggleZeroLn: (zeroLn: boolean) => void;
   onSelectDifficulty?: (path: string) => void;
   onOpenNewFile: () => void;
+  onOpenQuickSearch?: () => void;
 }
 
 /**
  * Card superior compacta:
  * Muestra el banner del mapa con background real, selector de dificultades,
- * badges, botón "Nuevo" y los filtros rápidos con líneas divisorias.
+ * badges, botón "Nuevo" y los filtros rápidos (0 LN activo, Anti-Jack y Kiai Boost próximamente).
  */
 export function BeatmapHeaderCard({
   source,
@@ -26,14 +28,12 @@ export function BeatmapHeaderCard({
   audioUrl,
   sourcePath,
   difficulties = [],
+  zeroLn,
+  onToggleZeroLn,
   onSelectDifficulty,
   onOpenNewFile,
+  onOpenQuickSearch,
 }: BeatmapHeaderCardProps) {
-  // Estado local para los filtros de conversión
-  const [antiJack, setAntiJack] = useState<boolean>(true);
-  const [zeroLn, setZeroLn] = useState<boolean>(false);
-  const [kiaiBoost, setKiaiBoost] = useState<boolean>(false);
-
   const title = source.title || fileName.replace(/\.osu$/i, "");
   const artist = source.artist || "Artista desconocido";
   const diffName = source.version || "Normal";
@@ -45,7 +45,7 @@ export function BeatmapHeaderCard({
         {backgroundUrl ? (
           <div
             className="beatmap-banner-bg"
-            style={{ backgroundImage: `url(${backgroundUrl})` }}
+            style={{ backgroundImage: `url("${backgroundUrl.replace(/"/g, '\\"')}")` }}
             aria-hidden="true"
           />
         ) : (
@@ -59,7 +59,10 @@ export function BeatmapHeaderCard({
               <select
                 className="beatmap-diff-select mono"
                 value={sourcePath ?? ""}
-                onChange={(e) => onSelectDifficulty?.(e.target.value)}
+                onChange={(e) => {
+                  e.target.blur();
+                  onSelectDifficulty?.(e.target.value);
+                }}
                 title="Cambiar dificultad del beatmap"
               >
                 {difficulties.map((diff) => (
@@ -74,15 +77,29 @@ export function BeatmapHeaderCard({
             <span className="beatmap-diff-badge mono">[{diffName}]</span>
           )}
 
-          <button
-            type="button"
-            className="beatmap-new-btn"
-            onClick={onOpenNewFile}
-            title="Cargar otro beatmap"
-          >
-            <FilePlus size={13} />
-            <span>Nuevo</span>
-          </button>
+          <div className="beatmap-banner-actions">
+            {onOpenQuickSearch && (
+              <button
+                type="button"
+                className="beatmap-search-btn"
+                onClick={onOpenQuickSearch}
+                title="Búsqueda rápida en osu! (Ctrl + P)"
+              >
+                <Search size={13} />
+                <span>Buscar</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="beatmap-new-btn"
+              onClick={onOpenNewFile}
+              title="Cargar otro beatmap"
+            >
+              <FilePlus size={13} />
+              <span>Nuevo</span>
+            </button>
+          </div>
         </div>
 
         <div className="beatmap-banner-bottom">
@@ -112,26 +129,26 @@ export function BeatmapHeaderCard({
         </div>
       </div>
 
-      {/* Barra horizontal premium de Filtros con divisores */}
+      {/* Barra horizontal de Filtros (0 LN funcional, otros con estado Próximamente) */}
       <div className="smart-tweaks-toolbar">
+        {/* Anti-Jack (Próximamente) */}
         <label
-          className={`tweak-toolbar-item${antiJack ? " is-checked" : ""}`}
-          title="Prevenir notas consecutivas en el mismo carril a intervalos muy cortos"
+          className="tweak-toolbar-item is-disabled"
+          title="Próximamente"
         >
           <input
             type="checkbox"
-            checked={antiJack}
-            onChange={(e) => setAntiJack(e.target.checked)}
+            disabled
+            checked={false}
             className="visually-hidden"
           />
-          <span className="tweak-toolbar-indicator">
-            {antiJack && <Check size={10} strokeWidth={3} />}
-          </span>
+          <span className="tweak-toolbar-indicator" />
           <span className="tweak-toolbar-label">Anti-Jack</span>
         </label>
 
         <div className="smart-tweaks-divider" aria-hidden="true" />
 
+        {/* 0 LN (Activo y funcional) */}
         <label
           className={`tweak-toolbar-item${zeroLn ? " is-checked" : ""}`}
           title="Convertir todas las Long Notes (LN) en notas simples (Rice)"
@@ -139,7 +156,7 @@ export function BeatmapHeaderCard({
           <input
             type="checkbox"
             checked={zeroLn}
-            onChange={(e) => setZeroLn(e.target.checked)}
+            onChange={(e) => onToggleZeroLn(e.target.checked)}
             className="visually-hidden"
           />
           <span className="tweak-toolbar-indicator">
@@ -150,19 +167,18 @@ export function BeatmapHeaderCard({
 
         <div className="smart-tweaks-divider" aria-hidden="true" />
 
+        {/* Kiai Boost (Próximamente) */}
         <label
-          className={`tweak-toolbar-item tweak-toolbar-item--kiai${kiaiBoost ? " is-checked" : ""}`}
-          title="Aumentar la densidad de mapeo durante las secciones de Kiai"
+          className="tweak-toolbar-item tweak-toolbar-item--kiai is-disabled"
+          title="Próximamente"
         >
           <input
             type="checkbox"
-            checked={kiaiBoost}
-            onChange={(e) => setKiaiBoost(e.target.checked)}
+            disabled
+            checked={false}
             className="visually-hidden"
           />
-          <span className="tweak-toolbar-indicator">
-            {kiaiBoost && <Check size={10} strokeWidth={3} />}
-          </span>
+          <span className="tweak-toolbar-indicator" />
           <span className="tweak-toolbar-label">Kiai Boost</span>
         </label>
       </div>

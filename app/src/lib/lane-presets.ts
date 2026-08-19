@@ -19,6 +19,41 @@ export interface PresetStorage {
 /** Clave de almacenamiento de los presets de mapeo. */
 export const PRESETS_STORAGE_KEY = "osu_4to7_lane_presets_v1";
 
+/** Clave de almacenamiento del mapeo de carriles activo seleccionado. */
+export const ACTIVE_LANE_MAP_KEY = "osu_4to7_active_lane_map_v1";
+
+/**
+ * Carga el estado de mapeo guardado en LocalStorage, o null si no existe.
+ */
+export function loadActiveLaneMapState(storage?: PresetStorage | null): LaneMapState | null {
+  const s = resolveStorage(storage);
+  if (!s) return null;
+  try {
+    const raw = s.getItem(ACTIVE_LANE_MAP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (isValidLaneMapState(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Almacenamiento corrupto o no disponible
+  }
+  return null;
+}
+
+/**
+ * Guarda el estado de mapeo actual en LocalStorage para conservarlo al reiniciar o cambiar de mapa.
+ */
+export function saveActiveLaneMapState(state: LaneMapState, storage?: PresetStorage | null): void {
+  const s = resolveStorage(storage);
+  if (!s) return;
+  try {
+    s.setItem(ACTIVE_LANE_MAP_KEY, JSON.stringify(state));
+  } catch {
+    // Almacenamiento lleno o bloqueado
+  }
+}
+
 /**
  * Presets predeterminados para conversión 4K a 7K con diferentes patrones
  * y skillsets (balanceados, entrenamiento de brackets/rolls y tryhard).

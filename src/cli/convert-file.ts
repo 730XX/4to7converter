@@ -21,6 +21,8 @@ export interface ConvertFileOptions {
   laneMap?: LaneMap;
   /** Cantidad de teclas destino; por defecto 7. */
   targetKeyCount?: number;
+  /** Convierte todas las notas largas (Hold Notes / LN) a notas simples (Rice). */
+  zeroLn?: boolean;
 }
 
 /** Resultado resumido de una conversión por línea de comandos. */
@@ -50,7 +52,11 @@ export async function convertFile(options: ConvertFileOptions): Promise<ConvertF
   const content = await readInputFile(options.inputPath);
   const beatmap = parseOsuFile(content);
 
-  const convertedBeatmap = convertBeatmap(beatmap, { laneMap, targetKeyCount });
+  const convertedBeatmap = convertBeatmap(beatmap, {
+    laneMap,
+    targetKeyCount,
+    zeroLn: options.zeroLn,
+  });
   const issues = validateConvertedBeatmap(convertedBeatmap);
   const serialized = serializeOsuFile(convertedBeatmap);
 
