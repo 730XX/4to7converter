@@ -36,6 +36,15 @@ jobs:
         with:
           workspaces: "./app/src-tauri -> target"
 
+      - name: Instalar .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Compilar osu-detector helper
+        run: |
+          dotnet build app/src-tauri/osu-detector/osu-detector.csproj -c Release -r win-x86
+
       - name: Instalar dependencias frontend
         run: |
           npm ci || npm install
