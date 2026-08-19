@@ -55,8 +55,7 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
     let currentKiaiStart: number | null = null;
     const duration = playback.durationMs;
 
-    for (let i = 0; i < sorted.length; i++) {
-      const tp = sorted[i];
+    for (const tp of sorted) {
       const isKiai = (tp.effects & 1) === 1;
 
       if (isKiai && currentKiaiStart === null) {

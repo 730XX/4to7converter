@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Cpu, FilePlus, Search } from "lucide-react";
+import { Check, ChevronDown, FilePlus, Search } from "lucide-react";
 import type { OsuBeatmap } from "../../../src/core/osu/types";
 import type { BeatmapDiffItem } from "../lib/native";
 

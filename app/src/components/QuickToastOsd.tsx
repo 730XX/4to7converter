@@ -61,10 +61,10 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
         >
           <div className="osd-label-row">
             <span className="osd-title" style={{ fontWeight: 700, color: "#fff" }}>
-              {osd.title ?? "¡Mapa 7K Guardado!"}
+              {renderedOsd.title ?? "¡Mapa 7K Guardado!"}
             </span>
           </div>
-          {osd.message && (
+          {renderedOsd.message && (
             <span
               className="osd-value mono"
               style={{
@@ -75,9 +75,9 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
-              title={osd.message}
+              title={renderedOsd.message}
             >
-              {osd.message}
+              {renderedOsd.message}
             </span>
           )}
         </div>

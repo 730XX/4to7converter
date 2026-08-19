@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, Music, Sparkles, X, CornerDownLeft, Layers } from "lucide-react";
+import { Search, Sparkles, X, CornerDownLeft, Layers } from "lucide-react";
 import { searchBeatmaps, type BeatmapSearchItem } from "../lib/native";
 
 interface QuickSearchModalProps {

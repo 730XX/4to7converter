@@ -21,6 +21,7 @@ import { StatsBar } from "./components/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
 import { appLogger } from "./lib/logger";
+import type { PlaybackControls } from "./lib/use-playback";
 import {
   isTauri,
   listBeatmapDifficulties,

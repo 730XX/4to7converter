@@ -358,7 +358,6 @@ function drawNotes(
       const isFalling = currentTimeMs < hitObject.timeMs;
       const isHolding =
         currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs;
-      const isFinished = currentTimeMs > hitObject.endTimeMs;
 
       const endY = getHoldEndY(
         hitObject.endTimeMs,

@@ -36,21 +36,10 @@ export function LaneMapper({
   onDeletePreset,
   onApplyPreset,
 }: LaneMapperProps) {
-  const [hintRow, setHintRow] = useState<number | null>(null);
-  const hintTimerRef = useRef<number | null>(null);
-
   const targetColumnCounts = useMemo(
     () => getTargetColumnCounts(state, targetKeyCount),
     [state, targetKeyCount],
   );
-
-  useEffect(() => {
-    return () => {
-      if (hintTimerRef.current !== null) {
-        window.clearTimeout(hintTimerRef.current);
-      }
-    };
-  }, []);
 
   const sourceColumns = Array.from({ length: sourceKeyCount }, (_, index) => index);
   const targetColumns = Array.from({ length: targetKeyCount }, (_, index) => index);
@@ -61,15 +50,9 @@ export function LaneMapper({
 
   function handleToggle(sourceColumn: number, targetColumn: number): void {
     const nextState = toggleTargetColumn(state, sourceColumn, targetColumn);
-    if (nextState === state) {
-      setHintRow(sourceColumn);
-      if (hintTimerRef.current !== null) {
-        window.clearTimeout(hintTimerRef.current);
-      }
-      hintTimerRef.current = window.setTimeout(() => setHintRow(null), 2000);
-      return;
+    if (nextState !== state) {
+      onChange(nextState);
     }
-    onChange(nextState);
   }
 
   function handleShuffle(): void {
