@@ -1,5 +1,5 @@
 import { RotateCcw, Shuffle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import {
   createDefaultLaneMapState,
