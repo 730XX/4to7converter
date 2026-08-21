@@ -16,7 +16,7 @@ pub mod windows_scanner {
     };
 
     #[derive(Debug, Clone, Serialize)]
-    pub struct OsuDetectedBeatmap {
+        pub struct OsuDetectedBeatmap {
         pub path: String,
         pub folder_name: String,
         pub file_name: String,

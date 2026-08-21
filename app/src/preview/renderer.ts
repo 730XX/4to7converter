@@ -4,6 +4,7 @@ import {
   getHoldEndY,
   getNoteY,
   getVisibleHitObjects,
+  isNoteVisible,
   type PlayfieldMetrics,
 } from "./preview-math";
 
@@ -143,9 +144,27 @@ export function buildPlayfieldPalette(keyCount: number): PlayfieldPalette {
   };
 }
 
+export interface PlayfieldFrameOptions {
+  approachMs?: number;
+  scrollDirection?: "down" | "up";
+  hitGlow?: boolean;
+  isPlayMode?: boolean;
+  userActiveLanes?: boolean[] | null;
+  combo?: number;
+  lastBrokenCombo?: number;
+  comboBreakTime?: number;
+  lastHitTime?: number;
+  hitNoteIndices?: Set<number> | null;
+  holdingLnIndices?: Set<number> | null;
+  comboPositionPercent?: number;
+  debugHitWindows?: boolean;
+  showLaneSeparators?: boolean;
+  noteHeight?: number;
+}
+
 /**
- * Dibuja un fotograma completo del playfield: fondo, carriles, línea de golpe
- * y notas visibles en el instante actual.
+ * Dibuja un fotograma completo del playfield: fondo, carriles, línea de golpe,
+ * notas visibles y HUD de combo para el Modo Play.
  */
 export function drawPlayfieldFrame(
   ctx: CanvasRenderingContext2D,
@@ -155,12 +174,50 @@ export function drawPlayfieldFrame(
   currentTimeMs: number,
   keyCount: number,
   palette: PlayfieldPalette,
-  approachMs: number = PLAYFIELD_APPROACH_MS,
+  options: PlayfieldFrameOptions | number = PLAYFIELD_APPROACH_MS,
   scrollDirection: "down" | "up" = "down",
   hitGlow: boolean = true,
 ): void {
+  // Compatibilidad hacia atrás si options se pasa como approachMs numérico
+  let approachMs = PLAYFIELD_APPROACH_MS;
+  let dir = scrollDirection;
+  let glow = hitGlow;
+  let isPlayMode = false;
+  let userActiveLanes: boolean[] | null = null;
+  let combo = 0;
+  let lastBrokenCombo = 0;
+  let comboBreakTime = 0;
+  let lastHitTime = 0;
+  let hitNoteIndices: Set<number> | null = null;
+  let holdingLnIndices: Set<number> | null = null;
+  let showLaneSeparators = true;
+  let noteHeight = 16;
+
+  if (typeof options === "object") {
+    approachMs = options.approachMs ?? PLAYFIELD_APPROACH_MS;
+    dir = options.scrollDirection ?? "down";
+    glow = options.hitGlow ?? true;
+    isPlayMode = options.isPlayMode ?? false;
+    userActiveLanes = options.userActiveLanes ?? null;
+    combo = options.combo ?? 0;
+    lastBrokenCombo = options.lastBrokenCombo ?? 0;
+    comboBreakTime = options.comboBreakTime ?? 0;
+    lastHitTime = options.lastHitTime ?? 0;
+    hitNoteIndices = options.hitNoteIndices ?? null;
+    holdingLnIndices = options.holdingLnIndices ?? null;
+    showLaneSeparators = options.showLaneSeparators ?? true;
+    noteHeight = options.noteHeight ?? 16;
+  } else if (typeof options === "number") {
+    approachMs = options;
+  }
+
+  const comboPositionPercent =
+    typeof options === "object" ? options.comboPositionPercent ?? 55 : 55;
+  const debugHitWindows =
+    typeof options === "object" ? options.debugHitWindows ?? false : false;
+
   const hitLineY =
-    scrollDirection === "down" ? height - PLAYFIELD_HIT_LINE_OFFSET : PLAYFIELD_HIT_LINE_OFFSET;
+    dir === "down" ? height - PLAYFIELD_HIT_LINE_OFFSET : PLAYFIELD_HIT_LINE_OFFSET;
 
   const metrics: PlayfieldMetrics = {
     width,
@@ -169,8 +226,25 @@ export function drawPlayfieldFrame(
     topPadding: PLAYFIELD_TOP_PADDING,
     approachMs,
   };
+
   drawBackground(ctx, width, height, palette);
-  drawLanes(ctx, width, height, keyCount, palette);
+  if (showLaneSeparators) {
+    drawLanes(ctx, width, height, keyCount, palette);
+  }
+
+  // Dibujar zonas de debug de ventana de golpe si está activo
+  if (debugHitWindows) {
+    drawDebugHitWindows(
+      ctx,
+      hitObjects,
+      currentTimeMs,
+      metrics,
+      keyCount,
+      dir,
+      hitNoteIndices,
+    );
+  }
+
   drawHitLine(
     ctx,
     width,
@@ -180,10 +254,37 @@ export function drawPlayfieldFrame(
     hitObjects,
     currentTimeMs,
     palette,
-    hitGlow,
-    scrollDirection,
+    glow,
+    dir,
+    userActiveLanes,
   );
-  drawNotes(ctx, hitObjects, currentTimeMs, metrics, keyCount, palette, scrollDirection);
+  drawNotes(
+    ctx,
+    hitObjects,
+    currentTimeMs,
+    metrics,
+    keyCount,
+    palette,
+    dir,
+    hitNoteIndices,
+    holdingLnIndices,
+    isPlayMode,
+    noteHeight,
+  );
+
+  // Si está en Modo Play, dibujar el HUD de Combo a la altura configurada
+  if (isPlayMode) {
+    drawComboHud(
+      ctx,
+      width,
+      height,
+      combo,
+      lastBrokenCombo,
+      comboBreakTime,
+      lastHitTime,
+      comboPositionPercent,
+    );
+  }
 }
 
 /** Pinta el fondo del playfield. */
@@ -218,7 +319,7 @@ function drawLanes(
   }
 }
 
-/** Pinta la línea de golpe y el degradado vertical suave coloreado por carril al golpear notas. */
+/** Pinta la línea de golpe y el degradado vertical suave coloreado por carril al golpear notas o pulsar teclas. */
 function drawHitLine(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -230,20 +331,45 @@ function drawHitLine(
   palette: PlayfieldPalette,
   hitGlow: boolean = true,
   scrollDirection: "down" | "up" = "down",
+  userActiveLanes: boolean[] | null = null,
 ): void {
   const columnWidth = width / keyCount;
+  const BEAM_HEIGHT = 90;
 
-  // Si hitGlow está activado, dibujamos el degradado suave y fluido por carril
-  if (hitGlow) {
+  // 1. Si estamos en Modo Play y el usuario está pulsando teclas, dibujar los rayos de pulsación activa
+  if (userActiveLanes && userActiveLanes.length > 0) {
+    for (let col = 0; col < keyCount; col++) {
+      if (userActiveLanes[col]) {
+        const colX = Math.round(col * columnWidth);
+        const actualWidth = Math.round((col + 1) * columnWidth) - colX;
+        const skin = palette.laneSkins[col] ?? WHITE_SKIN;
+
+        const targetY =
+          scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY + BEAM_HEIGHT;
+        const beamGrad = ctx.createLinearGradient(0, hitLineY, 0, targetY);
+
+        beamGrad.addColorStop(0, hexToRgba(skin.top, 0.95));
+        beamGrad.addColorStop(0.35, hexToRgba(skin.mid, 0.5));
+        beamGrad.addColorStop(1, hexToRgba(skin.bot, 0));
+
+        ctx.fillStyle = beamGrad;
+        ctx.fillRect(
+          colX + 1,
+          scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY,
+          actualWidth - 1,
+          BEAM_HEIGHT,
+        );
+      }
+    }
+  } else if (hitGlow) {
+    // 2. Modo Preview clásico (Autoplay): evaluamos notas próximas a la línea de golpe
     const ATTACK_MS = 50; // Entrada suave (fade-in)
     const DECAY_MS = 250; // Salida progresiva suave (fade-out)
-    const BEAM_HEIGHT = 90;
 
     for (const ho of hitObjects) {
       const isHoldActive =
         ho.endTimeMs !== null && currentTimeMs >= ho.timeMs && currentTimeMs <= ho.endTimeMs;
 
-      // Evaluamos notas desde un poco antes de la línea para entrada anticipada suave
       const timeDiff = currentTimeMs - ho.timeMs;
       const isInWindow = timeDiff >= -ATTACK_MS && timeDiff <= DECAY_MS;
 
@@ -255,14 +381,11 @@ function drawHitLine(
 
         let intensity: number;
         if (isHoldActive) {
-          // Durante la hold note se mantiene estable con brillo suave configurable
           intensity = RENDER_CONFIG.hitLine.holdingBeamIntensity;
         } else if (timeDiff < 0) {
-          // Fase 1: Fade-in suave al aproximarse a la línea
           const progress = (timeDiff + ATTACK_MS) / ATTACK_MS;
           intensity = progress * progress * 0.75;
         } else {
-          // Fase 2: Fade-out cuadrático suave al alejarse
           const progress = timeDiff / DECAY_MS;
           const decay = 1 - progress;
           intensity = decay * decay * 0.75;
@@ -273,7 +396,6 @@ function drawHitLine(
             scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY + BEAM_HEIGHT;
           const beamGrad = ctx.createLinearGradient(0, hitLineY, 0, targetY);
 
-          // Degradado recto usando el color del carril
           beamGrad.addColorStop(0, hexToRgba(skin.top, intensity * 0.95));
           beamGrad.addColorStop(0.35, hexToRgba(skin.mid, intensity * 0.5));
           beamGrad.addColorStop(1, hexToRgba(skin.bot, 0));
@@ -322,20 +444,32 @@ function drawNotes(
   keyCount: number,
   palette: PlayfieldPalette,
   scrollDirection: "down" | "up" = "down",
+  hitNoteIndices: Set<number> | null = null,
+  holdingLnIndices: Set<number> | null = null,
+  isPlayMode: boolean = false,
+  noteHeight: number = 16,
 ): void {
   const speedPxPerMs =
     scrollDirection === "down"
       ? (metrics.hitLineY - metrics.topPadding) / metrics.approachMs
       : (metrics.height - metrics.topPadding - metrics.hitLineY) / metrics.approachMs;
 
-  const visible = getVisibleHitObjects(hitObjects, currentTimeMs, metrics, scrollDirection);
   const columnWidth = metrics.width / keyCount;
   // Margen de 1px a cada lado para respetar las líneas divisoras
   const noteWidth = Math.max(columnWidth - 2, 2);
 
-  for (const hitObject of visible) {
+  const topBound = -60;
+  const bottomBound = metrics.height + 60;
+
+  for (let i = 0; i < hitObjects.length; i++) {
+    const hitObject = hitObjects[i];
+
+    // En modo play, si la nota ya fue juzgada y oculta, no dibujarla
+    if (isPlayMode && hitNoteIndices && hitNoteIndices.has(i)) {
+      continue;
+    }
+
     const columnIndex = Math.min(hitObject.column, keyCount - 1);
-    const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);
     const noteY = getNoteY(
       hitObject.timeMs,
       currentTimeMs,
@@ -343,6 +477,25 @@ function drawNotes(
       speedPxPerMs,
       scrollDirection,
     );
+
+    // Calcular posición final de la LN si aplica
+    const endY =
+      hitObject.endTimeMs === null
+        ? null
+        : getHoldEndY(
+            hitObject.endTimeMs,
+            currentTimeMs,
+            metrics.hitLineY,
+            speedPxPerMs,
+            scrollDirection,
+          );
+
+    // Descarte rápido de notas fuera de pantalla (culling)
+    if (!isNoteVisible(noteY, endY, topBound, bottomBound)) {
+      continue;
+    }
+
+    const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);
     const skin = palette.laneSkins[columnIndex] ?? WHITE_SKIN;
 
     if (hitObject.endTimeMs === null) {
@@ -352,38 +505,108 @@ function drawNotes(
       ctx.globalAlpha = isPassed
         ? RENDER_CONFIG.notes.rice.passedAlpha
         : RENDER_CONFIG.notes.rice.fallingAlpha;
-      drawNoteBar(ctx, centerX, noteY, noteWidth, skin);
+      drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight);
     } else {
       // Hold Note (LN)
+      // En Modo Play: si el usuario la está sosteniendo activamente, forzar estado "holding"
+      const isUserHolding = isPlayMode && holdingLnIndices != null && holdingLnIndices.has(i);
       const isFalling = currentTimeMs < hitObject.timeMs;
-      const isHolding =
-        currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs;
-
-      const endY = getHoldEndY(
-        hitObject.endTimeMs,
-        currentTimeMs,
-        metrics.hitLineY,
-        speedPxPerMs,
-        scrollDirection,
-      );
+      const isHolding = isUserHolding ||
+        (currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs);
 
       if (isHolding) {
-        // Presionada: Color y brillo configurables
+        // Presionada: Color y brillo configurables, head fija en la hit line
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.holdingAlpha;
         const effectiveHeadY = metrics.hitLineY;
-        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY, noteWidth, skin, true);
+        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY!, noteWidth, skin, true, noteHeight);
       } else if (isFalling) {
         // Cayendo: Opacidad configurable
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.fallingAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY, noteWidth, skin, false);
+        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight);
       } else {
         // Ya completada / Pasada
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.passedAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY, noteWidth, skin, false);
+        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight);
       }
     }
   }
   ctx.globalAlpha = 1;
+}
+
+/**
+ * Dibuja el HUD de combo centrado horizontalmente a la altura configurada del canvas.
+ */
+function drawComboHud(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  combo: number,
+  lastBrokenCombo: number,
+  comboBreakTime: number,
+  lastHitTime: number,
+  comboPositionPercent: number = 55,
+): void {
+  const centerX = width / 2;
+  // Altura configurable (por defecto 55% del alto, bien visible en zona de lectura)
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100);
+  const now = performance.now();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  if (combo > 0) {
+    // 1. Combo Activo con micro-escala elástica tras conectar nota
+    const timeSinceHit = now - lastHitTime;
+    let scale = 1.0;
+    if (timeSinceHit < 140) {
+      const p = timeSinceHit / 140;
+      scale = 1.0 + (1 - p) * 0.18; // 1.18 -> 1.0
+    }
+
+    ctx.translate(centerX, baseY);
+    ctx.scale(scale, scale);
+
+    // Sombra de resplandor sutil estilo mania
+    ctx.shadowColor = "rgba(255, 255, 255, 0.4)";
+    ctx.shadowBlur = 12;
+
+    // Número del Combo
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 36px 'Inter', system-ui, -apple-system, sans-serif";
+    ctx.fillText(String(combo), 0, -8);
+
+    // Etiqueta "COMBO"
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+    ctx.font = "800 11px 'Inter', system-ui, sans-serif";
+    ctx.letterSpacing = "3px";
+    ctx.fillText("COMBO", 0, 16);
+  } else if (lastBrokenCombo > 0 && now - comboBreakTime < 600) {
+    // 2. Animación de Combo Roto (decremento y desvanecimiento suave a 0)
+    const elapsed = now - comboBreakTime;
+    const progress = elapsed / 600; // 0.0 -> 1.0
+    const alpha = (1 - progress) * (1 - progress); // fade out cuadrático
+    const offsetY = progress * 12; // sutil caída de 12px
+
+    ctx.translate(centerX, baseY + offsetY);
+
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(244, 63, 94, 0.5)";
+    ctx.shadowBlur = 8;
+
+    // Número anterior desvaneciéndose en color rojo/rosado suave
+    ctx.fillStyle = "#f43f5e";
+    ctx.font = "900 32px 'Inter', system-ui, -apple-system, sans-serif";
+    ctx.fillText(String(lastBrokenCombo), 0, -8);
+
+    ctx.fillStyle = "rgba(244, 63, 94, 0.7)";
+    ctx.font = "800 11px 'Inter', system-ui, sans-serif";
+    ctx.letterSpacing = "3px";
+    ctx.fillText("MISS", 0, 16);
+  }
+
+  ctx.restore();
 }
 
 /** Dibuja una nota normal con efecto 3D metálico con brillo superior y base más oscura. */
@@ -393,17 +616,18 @@ function drawNoteBar(
   y: number,
   noteWidth: number,
   skin: LaneSkinColor,
+  noteHeight: number = 16,
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
-  const topY = Math.round(y - NOTE_HEIGHT / 2);
+  const topY = Math.round(y - noteHeight / 2);
 
-  const grad = ctx.createLinearGradient(0, topY, 0, topY + NOTE_HEIGHT);
+  const grad = ctx.createLinearGradient(0, topY, 0, topY + noteHeight);
   grad.addColorStop(0, skin.top);
   grad.addColorStop(0.35, skin.mid);
   grad.addColorStop(1, skin.bot);
 
   ctx.fillStyle = grad;
-  ctx.fillRect(x, topY, noteWidth, NOTE_HEIGHT);
+  ctx.fillRect(x, topY, noteWidth, noteHeight);
 
   // Borde fino superior de brillo
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
@@ -411,7 +635,7 @@ function drawNoteBar(
 
   // Borde fino inferior de sombra
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-  ctx.fillRect(x, topY + NOTE_HEIGHT - 2, noteWidth, 2);
+  ctx.fillRect(x, topY + noteHeight - 2, noteWidth, 2);
 }
 
 /** Dibuja una hold note con cuerpo translúcido y cabeza metálica. */
@@ -423,6 +647,7 @@ function drawHoldNoteBar(
   noteWidth: number,
   skin: LaneSkinColor,
   isHolding: boolean = false,
+  noteHeight: number = 16,
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
   const top = Math.min(headY, tailY);
@@ -449,5 +674,69 @@ function drawHoldNoteBar(
   ctx.fillRect(x + 1, tailY - 1, noteWidth - 2, 2);
 
   // Cabeza de la nota
-  drawNoteBar(ctx, centerX, headY, noteWidth, skin);
+  drawNoteBar(ctx, centerX, headY, noteWidth, skin, noteHeight);
+}
+
+/**
+ * Dibuja rectángulos rojos semitransparentes en cada carril indicando la zona
+ * donde pulsar una tecla es VÁLIDO (±140ms de cada nota).
+ * Cualquier pulsación FUERA de estos rectángulos se penaliza como miss por ghost tap.
+ */
+function drawDebugHitWindows(
+  ctx: CanvasRenderingContext2D,
+  hitObjects: HitObject[],
+  currentTimeMs: number,
+  metrics: PlayfieldMetrics,
+  keyCount: number,
+  scrollDirection: "down" | "up",
+  hitNoteIndices: Set<number> | null,
+): void {
+  const speedPxPerMs =
+    scrollDirection === "down"
+      ? (metrics.hitLineY - metrics.topPadding) / metrics.approachMs
+      : (metrics.height - metrics.topPadding - metrics.hitLineY) / metrics.approachMs;
+
+  const columnWidth = metrics.width / keyCount;
+  const laneWidth = Math.max(columnWidth - 2, 2);
+  const HIT_WINDOW_MS = 140;
+
+  ctx.save();
+
+  for (let i = 0; i < hitObjects.length; i++) {
+    // Si la nota ya fue juzgada, no dibujar su zona de hit
+    if (hitNoteIndices && hitNoteIndices.has(i)) {
+      continue;
+    }
+
+    const note = hitObjects[i];
+    const columnIndex = Math.min(note.column, keyCount - 1);
+    const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);
+    const x = Math.round(centerX - laneWidth / 2);
+
+    // Calcular la posición Y del límite temprano (-140ms) y límite tardío (+140ms)
+    const earlyTime = note.timeMs - HIT_WINDOW_MS;
+    const lateTime = note.timeMs + HIT_WINDOW_MS;
+
+    const yEarly = getNoteY(earlyTime, currentTimeMs, metrics.hitLineY, speedPxPerMs, scrollDirection);
+    const yLate = getNoteY(lateTime, currentTimeMs, metrics.hitLineY, speedPxPerMs, scrollDirection);
+
+    const top = Math.min(yEarly, yLate);
+    const bottom = Math.max(yEarly, yLate);
+    const height = Math.max(bottom - top, 2);
+
+    // Descarte si está completamente fuera de pantalla
+    if (bottom < -60 || top > metrics.height + 60) {
+      continue;
+    }
+
+    // Rectángulo rojo semitransparente con borde nítido
+    ctx.fillStyle = "rgba(239, 68, 68, 0.18)";
+    ctx.fillRect(x, top, laneWidth, height);
+
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.65)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, top + 0.5, laneWidth - 1, height - 1);
+  }
+
+  ctx.restore();
 }

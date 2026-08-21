@@ -232,6 +232,159 @@ button {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
+/* Cápsula de Metrónomo Auto-ajustable (Alineada a la izquierda -> 100% en Kiai) */
+.rhythm-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+  background: rgba(14, 18, 28, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-md);
+  padding: 7px 14px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    width 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.5s ease,
+    background 0.5s ease,
+    box-shadow 0.5s ease,
+    padding 0.5s ease;
+}
+
+/* Modo Kiai: se expande al 100% del ancho del sidebar de forma pausada y suave */
+.rhythm-capsule.is-kiai {
+  width: 100%;
+  align-self: stretch;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-color: rgba(245, 158, 11, 0.6);
+  background: radial-gradient(ellipse at 50% -20%, rgba(245, 158, 11, 0.22) 0%, rgba(15, 20, 32, 0.85) 80%);
+  color: #fbbf24;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.5),
+    0 0 28px rgba(245, 158, 11, 0.25),
+    inset 0 1px 0 rgba(251, 191, 36, 0.35);
+}
+
+/* Zona BPM */
+.rhythm-capsule-bpm {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.rhythm-bpm-value {
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  transition: color 0.25s ease;
+}
+
+.rhythm-capsule.is-kiai .rhythm-bpm-value {
+  color: #fef08a;
+}
+
+.rhythm-capsule-icon {
+  color: #38bdf8;
+  transition: color 0.2s ease;
+}
+
+.rhythm-capsule.is-kiai .rhythm-capsule-icon {
+  color: #fbbf24;
+}
+
+/* Cuadritos de Beat Rítmico */
+.rhythm-boxes-grid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.rhythm-box {
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+  background: #000000;
+  border: none;
+  transition: none;
+  will-change: opacity;
+}
+
+/* Beat Activo Normal: Blanco puro con resplandor */
+.rhythm-box.is-active {
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9), 0 0 4px #ffffff;
+}
+
+.rhythm-box.is-active.is-downbeat {
+  background: #ffffff;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 1), 0 0 6px #ffffff;
+}
+
+/* Beat Activo en Kiai: Amarillo/dorado con resplandor cálido */
+.rhythm-box.is-active.is-kiai {
+  background: #fbbf24;
+  box-shadow: 0 0 16px #f59e0b, 0 0 6px #fbbf24;
+}
+
+.rhythm-box.is-active.is-kiai.is-downbeat {
+  background: #ffffff;
+  box-shadow: 0 0 18px #ffffff, 0 0 8px #f59e0b;
+}
+
+/* Slot de Kiai Expandible (Acordeón elástico suave) */
+.rhythm-kiai-slot {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  opacity: 0;
+  margin-left: -12px;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    max-width 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s ease 0.1s,
+    margin 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rhythm-kiai-slot.is-visible {
+  max-width: 90px;
+  opacity: 1;
+  margin-left: 0;
+  pointer-events: auto;
+}
+
+/* Tag de Kiai */
+.rhythm-kiai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f59e0b;
+  color: #000000;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
 .app-footer {
   flex-shrink: 0;
   background: var(--color-surface);
@@ -285,6 +438,35 @@ button {
 
 .app-footer .primary-button {
   margin-left: auto;
+}
+
+.preview-button--play-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.preview-button--play-mode:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.preview-button--play-mode.is-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(234, 88, 12, 0.25) 100%);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.25);
 }
 
 .visually-hidden {
@@ -1318,10 +1500,73 @@ button {
   gap: var(--space-4);
 }
 
+/* Tabs Navigation en Settings Drawer */
+.settings-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0px;
+  margin-left: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.settings-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-tab-btn:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-tab-btn.is-active {
+  color: var(--color-accent-strong);
+  background: rgba(91, 140, 255, 0.12);
+  border-color: rgba(91, 140, 255, 0.3);
+  box-shadow: 0 2px 10px rgba(91, 140, 255, 0.12);
+}
+
+.settings-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: tabFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .settings-group-header {
@@ -3012,6 +3257,456 @@ button {
   font-weight: 700;
   padding: 1px 5px;
 }
+
+/* ==========================================================================
+   Keybinds Modal (Glassmorphism & Arcade Style)
+   ========================================================================== */
+
+.keybinds-modal-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  background: rgba(14, 18, 26, 0.94);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.75),
+    0 0 40px rgba(245, 158, 11, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: keybindsModalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes keybindsModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.keybinds-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.keybinds-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.keybinds-modal-title-group h2 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.keybinds-modal-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 2px 0 0 0;
+}
+
+.keybinds-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.keybinds-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+
+.keybind-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px;
+  background: rgba(22, 28, 40, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.keybind-card:hover {
+  background: rgba(30, 38, 54, 0.85);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.keybind-card.is-center {
+  background: rgba(36, 32, 20, 0.7);
+}
+
+.keybind-card.is-listening {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+  transform: scale(1.04);
+}
+
+.keybind-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.keybind-lane-pill {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.keybind-lane-label {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+.keybind-key-box {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+
+.keybind-key-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.keybind-pulse-text {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fbbf24;
+  animation: pulseListen 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes pulseListen {
+  from {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.keybind-hint {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.keybinds-preset-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.keybinds-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.keybinds-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.keybinds-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.keybinds-btn--secondary {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.keybinds-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.keybinds-btn--cancel {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.keybinds-btn--cancel:hover {
+  color: #ffffff;
+}
+
+/* Keybinds mini preview strip en SettingsDrawer */
+.keybinds-strip-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.keybinds-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.keybinds-strip:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.keybinds-strip-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #e2e8f0;
+}
+
+.keybinds-strip-key.is-center {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.keybinds-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-md);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.keybinds-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ==========================================================================
+   Play Mode Stage Overlay (Full Height Zen / Arcade Focus Stage)
+   ========================================================================== */
+
+.play-stage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 14, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: playStageOverlayFade 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes playStageOverlayFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.play-stage-container {
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: playStagePopup 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes playStagePopup {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.play-stage-header {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  right: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.play-stage-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+  letter-spacing: 0.04em;
+  pointer-events: auto;
+}
+
+.play-stage-debug-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.play-stage-debug-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.play-stage-debug-btn.is-active {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #f87171;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+.play-stage-exit-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.play-stage-exit-btn:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #f43f5e;
+  transform: translateY(-1px);
+}
+
+.play-stage-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  background: #000000;
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  border-right: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 0 80px rgba(0, 0, 0, 0.95),
+    0 0 40px rgba(245, 158, 11, 0.15);
+  overflow: hidden;
+  display: flex;
+}
+
+.play-stage-track .single-canvas-container {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+}
+
+
 
 
 

@@ -28,49 +28,27 @@ export function QuickSearchModal({
   const listRef = useRef<HTMLDivElement | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
 
-  const [isClosing, setIsClosing] = useState(false);
-  const [renderedOpen, setRenderedOpen] = useState(isOpen);
-  const closeTimeoutRef = useRef<number | null>(null);
-
-  // Manejo de montaje / desmontaje animado
+  // Inicializar foco y limpiar al abrir
   useEffect(() => {
     if (isOpen) {
-      if (closeTimeoutRef.current !== null) {
-        clearTimeout(closeTimeoutRef.current);
-        closeTimeoutRef.current = null;
-      }
-      setRenderedOpen(true);
-      setIsClosing(false);
       setQuery("");
       setResults([]);
       setSelectedIndex(0);
-      setTimeout(() => {
+      const timer = window.setTimeout(() => {
         inputRef.current?.focus();
-      }, 40);
-    } else if (renderedOpen && !isClosing) {
-      setIsClosing(true);
-      closeTimeoutRef.current = window.setTimeout(() => {
-        setRenderedOpen(false);
-        setIsClosing(false);
-        closeTimeoutRef.current = null;
-      }, 140);
+      }, 30);
+      return () => window.clearTimeout(timer);
     }
-  }, [isOpen, renderedOpen, isClosing]);
+  }, [isOpen]);
 
-  function handleRequestClose(): void {
-    if (isClosing) return;
-    setIsClosing(true);
-    closeTimeoutRef.current = window.setTimeout(() => {
-      onClose();
-      setIsClosing(false);
-      setRenderedOpen(false);
-      closeTimeoutRef.current = null;
-    }, 140);
+  function handleSelect(path: string): void {
+    onSelectBeatmap(path);
+    onClose();
   }
 
   // Búsqueda con debounce para fluidez total al escribir
   useEffect(() => {
-    if (!renderedOpen || isClosing) return;
+    if (!isOpen) return;
 
     if (debounceTimerRef.current !== null) {
       clearTimeout(debounceTimerRef.current);
@@ -101,13 +79,13 @@ export function QuickSearchModal({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [query, renderedOpen, isClosing, currentBeatmapPath]);
+  }, [query, isOpen, currentBeatmapPath]);
 
   // Manejo de teclado (Flechas, Enter, Escape)
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
     if (event.key === "Escape") {
       event.preventDefault();
-      handleRequestClose();
+      onClose();
       return;
     }
 
@@ -131,8 +109,7 @@ export function QuickSearchModal({
       event.preventDefault();
       const selected = results[selectedIndex];
       if (selected) {
-        onSelectBeatmap(selected.path);
-        handleRequestClose();
+        handleSelect(selected.path);
       }
     }
   }
@@ -146,20 +123,14 @@ export function QuickSearchModal({
     }
   }
 
-  if (!renderedOpen) {
+  if (!isOpen) {
     return null;
   }
 
-  const closingClass = isClosing ? " is-closing" : "";
-
   return (
-    <div
-      className={`quick-search-overlay${closingClass}`}
-      onClick={handleRequestClose}
-      onWheel={(e) => e.stopPropagation()}
-    >
+    <div className="quick-search-overlay" onClick={onClose}>
       <div
-        className={`quick-search-dialog${closingClass}`}
+        className="quick-search-dialog"
         onClick={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
         role="dialog"
@@ -214,10 +185,7 @@ export function QuickSearchModal({
                 <div
                   key={`${item.path}-${index}`}
                   className={`quick-search-card${isSelected ? " is-selected" : ""}`}
-                  onClick={() => {
-                    onSelectBeatmap(item.path);
-                    handleRequestClose();
-                  }}
+                  onClick={() => handleSelect(item.path)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
                   <div className="quick-search-card-left">

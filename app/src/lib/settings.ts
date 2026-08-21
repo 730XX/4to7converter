@@ -12,7 +12,22 @@ export interface UserSettings {
   hitGlow: boolean;
   hitsounds: boolean;
   diffSuffix: string; // Texto/sufijo agregado a la dificultad (ej: "(7K)")
+  keybinds7k: string[]; // 7 teclas para el modo play (ej: ["KeyS", "KeyD", "KeyF", "Space", "KeyJ", "KeyK", "KeyL"])
+  playOffsetMs: number; // Offset de calibración independiente para el modo play en ms (-150 a 150)
+  comboPositionPercent: number; // Altura vertical del combo en porcentaje de la pantalla (30 a 85, default: 55)
+  playShowLaneSeparators: boolean; // Mostrar u ocultar las barras divisorias de carriles solo en Modo Play
+  noteHeight: number; // Altura en píxeles de las notas (10 a 36, default: 16)
 }
+
+export const DEFAULT_KEYBINDS_7K: string[] = [
+  "KeyS",
+  "KeyD",
+  "KeyF",
+  "Space",
+  "KeyJ",
+  "KeyK",
+  "KeyL",
+];
 
 export const DEFAULT_SETTINGS: UserSettings = {
   volume: 80,
@@ -25,7 +40,35 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hitGlow: true,
   hitsounds: true,
   diffSuffix: "(7K)",
+  keybinds7k: DEFAULT_KEYBINDS_7K,
+  playOffsetMs: 0,
+  comboPositionPercent: 55,
+  playShowLaneSeparators: true,
+  noteHeight: 16,
 };
+
+/**
+ * Formatea un KeyboardEvent.code a una representación corta y legible para la UI.
+ */
+export function formatKeyCode(code: string): string {
+  if (!code) return "?";
+  if (code.startsWith("Key")) return code.slice(3).toUpperCase();
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return `NUM ${code.slice(6)}`;
+  if (code === "Space") return "SPACE";
+  if (code.startsWith("Arrow")) return code.slice(5).toUpperCase();
+  if (code === "Semicolon") return ";";
+  if (code === "Quote") return "'";
+  if (code === "Comma") return ",";
+  if (code === "Period") return ".";
+  if (code === "Slash") return "/";
+  if (code === "Backslash") return "\\";
+  if (code === "BracketLeft") return "[";
+  if (code === "BracketRight") return "]";
+  if (code === "Minus") return "-";
+  if (code === "Equal") return "=";
+  return code.toUpperCase();
+}
 
 const STORAGE_KEY = "osu_4to7_settings_v1";
 
@@ -42,6 +85,23 @@ export function loadSettings(): UserSettings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      // Garantizar que las nuevas propiedades nunca queden undefined
+      playShowLaneSeparators:
+        typeof parsed.playShowLaneSeparators === "boolean"
+          ? parsed.playShowLaneSeparators
+          : DEFAULT_SETTINGS.playShowLaneSeparators,
+      noteHeight:
+        typeof parsed.noteHeight === "number" && !isNaN(parsed.noteHeight)
+          ? parsed.noteHeight
+          : DEFAULT_SETTINGS.noteHeight,
+      comboPositionPercent:
+        typeof parsed.comboPositionPercent === "number" && !isNaN(parsed.comboPositionPercent)
+          ? parsed.comboPositionPercent
+          : DEFAULT_SETTINGS.comboPositionPercent,
+      playOffsetMs:
+        typeof parsed.playOffsetMs === "number" && !isNaN(parsed.playOffsetMs)
+          ? parsed.playOffsetMs
+          : DEFAULT_SETTINGS.playOffsetMs,
     };
   } catch {
     return DEFAULT_SETTINGS;

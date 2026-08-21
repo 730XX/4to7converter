@@ -40,6 +40,8 @@ export interface UsePlaybackOptions {
   volume?: number; // 0 - 100
   hitsoundsEnabled?: boolean;
   hitsoundVolume?: number; // 0 - 100
+  isPlayMode?: boolean;
+  keybinds?: string[];
 }
 
 /**
@@ -52,7 +54,15 @@ export interface UsePlaybackOptions {
  * @returns Controles de reproducción listos para la UI.
  */
 export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
-  const { beatmap, audioUrl, volume = 80, hitsoundsEnabled = true, hitsoundVolume = 80 } = options;
+  const {
+    beatmap,
+    audioUrl,
+    volume = 80,
+    hitsoundsEnabled = true,
+    hitsoundVolume = 80,
+    isPlayMode = false,
+    keybinds = [],
+  } = options;
   const audioRef = useRef<AudioPlayer | null>(null);
   const isPlayingRef = useRef(false);
   const currentTimeMsRef = useRef(0);
@@ -67,6 +77,8 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
   const hitsoundsEnabledRef = useRef(hitsoundsEnabled);
   const hitsoundVolumeRef = useRef(hitsoundVolume);
   const hitsoundLastCheckedRef = useRef(0);
+  const isPlayModeRef = useRef(isPlayMode);
+  const keybindsRef = useRef(keybinds);
   const rafIdRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -79,6 +91,8 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
   beatmapRef.current = beatmap;
   hitsoundsEnabledRef.current = hitsoundsEnabled;
   hitsoundVolumeRef.current = hitsoundVolume;
+  isPlayModeRef.current = isPlayMode;
+  keybindsRef.current = keybinds;
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -163,6 +177,12 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         return;
       }
 
+      // Si estamos en Modo Play y la tecla Space está configurada como una de las keybinds de juego,
+      // no pausar el mapa (dejar que el juego capture el evento)
+      if (isPlayModeRef.current && keybindsRef.current.includes("Space")) {
+        return;
+      }
+
       // Solo ignorar la tecla Espacio si el usuario está tipeando texto en un campo editable
       const target = event.target as HTMLElement | null;
       if (target) {
@@ -215,10 +235,14 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         }
 
         // Detección determinista de hitsounds con escalamiento gradual para acordes (chords).
-        // Si caen varias notas en el mismo instante, no se satura el audio 7 veces:
-        // Se reproduce un único golpe nítido aumentando gradualmente (+25% por nota adicional).
+        // En Modo Play los hitsounds automáticos están 100% muteados
         const hitDelta = currentTimeMsRef.current - hitsoundLastCheckedRef.current;
-        if (hitsoundsEnabledRef.current && hitDelta > 0 && hitDelta < 500) {
+        if (
+          !isPlayModeRef.current &&
+          hitsoundsEnabledRef.current &&
+          hitDelta > 0 &&
+          hitDelta < 500
+        ) {
           let hitCount = 0;
           for (const hitObject of beatmapRef.current.hitObjects) {
             if (
@@ -231,8 +255,7 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
           if (hitCount > 0) {
             const baseVol = hitsoundVolumeRef.current / 100;
             const chordMultiplier = 1 + Math.min(hitCount - 1, 6) * 0.30;
-            //const effectiveVol = Math.min(1.0, baseVol * chordMultiplier);
-            const  effectiveVol = (baseVol * chordMultiplier)
+            const effectiveVol = baseVol * chordMultiplier;
             hitSoundEngine.playHit(effectiveVol);
           }
         }

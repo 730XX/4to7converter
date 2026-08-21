@@ -17,6 +17,7 @@ import { Playfield } from "./components/Playfield";
 import { QuickSearchModal } from "./components/QuickSearchModal";
 import { QuickToastOsd, type OsdState } from "./components/QuickToastOsd";
 import { SettingsDrawer } from "./components/SettingsDrawer";
+import { KeybindsModal } from "./components/KeybindsModal";
 import { StatsBar } from "./components/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
@@ -38,6 +39,11 @@ import {
   type LaneMapState,
 } from "./lib/lane-map-state";
 import { loadSettings, saveSettings, type UserSettings } from "./lib/settings";
+import {
+  getTimingSections,
+  getKiaiIntervals,
+  evaluateDynamicRhythm,
+} from "./preview/beat-grid";
 import {
   deletePreset,
   loadActiveLaneMapState,
@@ -78,6 +84,8 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isKeybindsModalOpen, setIsKeybindsModalOpen] = useState(false);
+  const [isPlayMode, setIsPlayMode] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
@@ -104,6 +112,9 @@ export default function App() {
   }, [laneMapState]);
 
   const playbackRef = useRef<PlaybackControls | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
+  const isPlayModeRef = useRef(isPlayMode);
+  isPlayModeRef.current = isPlayMode;
 
   // Atajos de teclado y combinaciones con rueda de ratón
   useEffect(() => {
@@ -132,9 +143,23 @@ export default function App() {
         return;
       }
 
-      // Tab: Intercalar entre 7K y Split
+      // Escape: Salir del Modo Play inmediatamente
+      if (event.key === "Escape") {
+        setIsPlayMode((prev) => {
+          if (prev) {
+            event.preventDefault();
+            return false;
+          }
+          return prev;
+        });
+      }
+
+      // Tab: Intercalar entre 7K y Split (desactivado en Modo Play)
       if (event.key === "Tab") {
         event.preventDefault();
+        if (isPlayModeRef.current) {
+          return;
+        }
         setSettings((prev) => ({
           ...prev,
           previewMode: prev.previewMode === "split" ? "7k" : "split",
@@ -281,6 +306,7 @@ export default function App() {
       setAudioUrl(audioPath === null ? null : toAudioUrl(audioPath));
       setBackgroundUrl(backgroundPath === null ? null : toAssetUrl(backgroundPath));
       setIsFileModalOpen(false);
+      setIsQuickSearchOpen(false);
 
       // Cargar lista de todas las dificultades del mapset
       listBeatmapDifficulties(path)
@@ -390,8 +416,63 @@ export default function App() {
     volume: settings.volume,
     hitsoundsEnabled: settings.hitsounds,
     hitsoundVolume: settings.hitsoundVolume,
+    isPlayMode,
+    keybinds: settings.keybinds7k,
   });
   playbackRef.current = playback;
+
+  const [isKiaiActive, setIsKiaiActive] = useState(false);
+
+  // Modular el brillo del fondo difuminado según el Kiai Time (Build-up 3s y Flash de drop)
+  useEffect(() => {
+    let animId: number;
+    const timingPoints = source?.timingPoints ?? [];
+    const timingSections = getTimingSections(timingPoints);
+    const kiaiIntervals = getKiaiIntervals(timingPoints, playback.durationMs);
+
+    function animateBackdrop(): void {
+      const curTime = playback.currentTimeMsRef.current;
+      const { buildupDim, flashIntensity, isInKiai, kiaiWave } = evaluateDynamicRhythm(
+        timingSections,
+        kiaiIntervals,
+        curTime,
+      );
+
+      // Sincronizar estado booleano de Kiai para el UI (solo cuando cambie)
+      setIsKiaiActive((prev) => (prev !== isInKiai ? isInKiai : prev));
+
+      if (backdropRef.current) {
+        // Brillo base según el ajuste del usuario (0.05 a 1.0)
+        const baseBrightness = Math.max(0.05, 1 - settings.backdropDim / 100);
+
+        let effectiveBrightness = baseBrightness;
+        let effectiveBlur = 28;
+
+        if (buildupDim > 0) {
+          // Fase 1: Build-up previo (3s antes): oscurece suavemente hasta un -85%
+          effectiveBrightness = baseBrightness * (1 - buildupDim * 0.85);
+          effectiveBlur = 28;
+        } else if (isInKiai) {
+          // Kiai: flash inicial + pulsos rítmicos constantes cada medio beat
+          const flashBoost = flashIntensity * 0.85;
+          const waveBoost = kiaiWave * 0.55;
+          effectiveBrightness = baseBrightness * (1 + Math.max(flashBoost, waveBoost));
+          effectiveBlur = Math.round(28 - Math.max(flashIntensity * 12, kiaiWave * 8));
+        } else {
+          // Fase 4: Estado normal: 100% de la opacidad del usuario
+          effectiveBrightness = baseBrightness;
+          effectiveBlur = 28;
+        }
+
+        effectiveBrightness = Math.max(0.02, effectiveBrightness);
+        backdropRef.current.style.filter = `blur(${effectiveBlur}px) brightness(${effectiveBrightness.toFixed(3)})`;
+      }
+      animId = requestAnimationFrame(animateBackdrop);
+    }
+
+    animId = requestAnimationFrame(animateBackdrop);
+    return () => cancelAnimationFrame(animId);
+  }, [source?.timingPoints, playback.durationMs, settings.backdropDim, playback.currentTimeMsRef]);
 
   function handleSavePreset(name: string): void {
     setPresets((previous) => savePreset(previous, name, laneMapState));
@@ -513,10 +594,10 @@ export default function App() {
     <>
       {backgroundUrl !== null && (
         <div
+          ref={backdropRef}
           className="app-backdrop"
           style={{
             backgroundImage: `url("${backgroundUrl.replace(/"/g, '\\"')}")`,
-            filter: `blur(28px) brightness(${Math.max(0.05, 1 - settings.backdropDim / 100)})`,
           }}
           aria-hidden="true"
         />
@@ -568,6 +649,7 @@ export default function App() {
               converted={converted}
               targetColumnCounts={targetColumnCounts}
               issueCounts={issueCounts}
+              playback={playback}
             />
             <IssuesPanel issues={issues} />
           </aside>
@@ -582,10 +664,23 @@ export default function App() {
               previewMode={settings.previewMode}
               hitGlow={settings.hitGlow}
               volume={settings.volume}
+              isPlayMode={isPlayMode}
+              keybinds={settings.keybinds7k}
+              playOffsetMs={settings.playOffsetMs}
+              comboPositionPercent={settings.comboPositionPercent}
+              playShowLaneSeparators={settings.playShowLaneSeparators}
+              noteHeight={settings.noteHeight}
+              onExitPlayMode={() => setIsPlayMode(false)}
             />
           </section>
         </div>
-        <PlaybackFooter playback={playback} beatmap={converted ?? source} onExport={handleExport} />
+        <PlaybackFooter
+          playback={playback}
+          beatmap={converted ?? source}
+          onExport={handleExport}
+          isPlayMode={isPlayMode}
+          onTogglePlayMode={() => setIsPlayMode((prev) => !prev)}
+        />
       </main>
 
       <SettingsDrawer
@@ -593,6 +688,14 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={setSettings}
+        onOpenKeybinds={() => setIsKeybindsModalOpen(true)}
+      />
+
+      <KeybindsModal
+        isOpen={isKeybindsModalOpen}
+        onClose={() => setIsKeybindsModalOpen(false)}
+        currentKeybinds={settings.keybinds7k}
+        onSave={(newKeys) => setSettings((prev) => ({ ...prev, keybinds7k: newKeys }))}
       />
 
       <QuickSearchModal

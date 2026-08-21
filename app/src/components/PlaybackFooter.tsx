@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ChangeEvent, MouseEvent } from "react";
-import { Download, Pause, Play, RotateCcw } from "lucide-react";
+import { Download, Eye, Gamepad2, Pause, Play, RotateCcw } from "lucide-react";
 import type { OsuBeatmap } from "../../../src/core/osu/types";
 import type { PlaybackControls } from "../lib/use-playback";
 import { formatTimeMs } from "../preview/preview-math";
@@ -12,6 +12,8 @@ interface PlaybackFooterProps {
   playback: PlaybackControls;
   beatmap?: OsuBeatmap | null;
   onExport: () => void;
+  isPlayMode?: boolean;
+  onTogglePlayMode?: () => void;
 }
 
 const DENSITY_BINS = 120; // 120 barras de resolución a lo largo de la canción
@@ -19,7 +21,13 @@ const DENSITY_BINS = 120; // 120 barras de resolución a lo largo de la canción
 /**
  * Barra inferior de reproducción con mini-gráfico de densidad de notas (Timeline Density).
  */
-export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterProps) {
+export function PlaybackFooter({
+  playback,
+  beatmap,
+  onExport,
+  isPlayMode = false,
+  onTogglePlayMode,
+}: PlaybackFooterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Calcular histograma de densidad de notas a lo largo de la duración
@@ -229,6 +237,18 @@ export function PlaybackFooter({ playback, beatmap, onExport }: PlaybackFooterPr
           ))}
         </select>
       </label>
+
+      {onTogglePlayMode && (
+        <button
+          type="button"
+          className={`preview-button preview-button--play-mode${isPlayMode ? " is-active" : ""}`}
+          onClick={onTogglePlayMode}
+          title={isPlayMode ? "Cambiar a Modo Preview (Autoplay)" : "Cambiar a Modo Play (Interactuable)"}
+        >
+          {isPlayMode ? <Gamepad2 size={16} /> : <Eye size={16} />}
+          <span>{isPlayMode ? "Modo Play" : "Preview"}</span>
+        </button>
+      )}
 
       <button type="button" className="primary-button primary-button--icon" onClick={onExport}>
         <Download size={18} />
