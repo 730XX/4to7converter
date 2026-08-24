@@ -26,6 +26,9 @@ interface PlayfieldProps {
   comboPositionPercent?: number;
   playShowLaneSeparators?: boolean;
   noteHeight?: number;
+  playShowHitError?: boolean;
+  playStageWidth?: number;
+  hitPositionOffset?: number;
   onExitPlayMode?: () => void;
 }
 
@@ -50,6 +53,9 @@ export function Playfield({
   comboPositionPercent = 55,
   playShowLaneSeparators = true,
   noteHeight = 16,
+  playShowHitError = true,
+  playStageWidth = 500,
+  hitPositionOffset = 40,
   onExitPlayMode,
 }: PlayfieldProps) {
   const [debugHitWindows, setDebugHitWindows] = useState(false);
@@ -90,8 +96,7 @@ export function Playfield({
         {/* Si se activa Modo Play durante Split, proyectar el 7K al frente a pantalla completa */}
         {isPlayMode && (
           <div className="play-stage-overlay">
-            <div className="play-stage-container">
-             
+            <div className="play-stage-container" style={{ maxWidth: `${playStageWidth}px` }}>
               <div className="play-stage-track">
                 <SinglePlayfieldCanvas
                   beatmap={targetBeatmap}
@@ -107,6 +112,8 @@ export function Playfield({
                   debugHitWindows={debugHitWindows}
                   showLaneSeparators={playShowLaneSeparators}
                   noteHeight={noteHeight}
+                  showHitError={playShowHitError}
+                  hitPositionOffset={hitPositionOffset}
                   onExitPlayMode={onExitPlayMode}
                 />
               </div>
@@ -140,7 +147,7 @@ export function Playfield({
       {/* OVERLAY DEL MODO PLAY: Se coloca por encima de toda la app ocupando todo el alto */}
       {isPlayMode && (
         <div className="play-stage-overlay">
-          <div className="play-stage-container">
+          <div className="play-stage-container" style={{ maxWidth: `${playStageWidth}px` }}>
             <div className="play-stage-track">
               <SinglePlayfieldCanvas
                 beatmap={activeBeatmap}
@@ -156,6 +163,8 @@ export function Playfield({
                 debugHitWindows={debugHitWindows}
                 showLaneSeparators={playShowLaneSeparators}
                 noteHeight={noteHeight}
+                showHitError={playShowHitError}
+                hitPositionOffset={hitPositionOffset}
                 onExitPlayMode={onExitPlayMode}
               />
             </div>
@@ -180,6 +189,8 @@ interface SinglePlayfieldCanvasProps {
   debugHitWindows?: boolean;
   showLaneSeparators?: boolean;
   noteHeight?: number;
+  showHitError?: boolean;
+  hitPositionOffset?: number;
   onExitPlayMode?: () => void;
 }
 
@@ -197,6 +208,8 @@ function SinglePlayfieldCanvas({
   debugHitWindows = false,
   showLaneSeparators = true,
   noteHeight = 16,
+  showHitError = true,
+  hitPositionOffset = 40,
   onExitPlayMode,
 }: SinglePlayfieldCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -214,6 +227,8 @@ function SinglePlayfieldCanvas({
   const debugHitWindowsRef = useRef(debugHitWindows);
   const showLaneSeparatorsRef = useRef(showLaneSeparators);
   const noteHeightRef = useRef(noteHeight);
+  const showHitErrorRef = useRef(showHitError);
+  const hitPositionOffsetRef = useRef(hitPositionOffset);
   const onExitPlayModeRef = useRef(onExitPlayMode);
   const rafIdRef = useRef<number | null>(null);
 
@@ -232,12 +247,14 @@ function SinglePlayfieldCanvas({
   debugHitWindowsRef.current = debugHitWindows;
   showLaneSeparatorsRef.current = showLaneSeparators;
   noteHeightRef.current = noteHeight;
+  showHitErrorRef.current = showHitError;
+  hitPositionOffsetRef.current = hitPositionOffset;
   onExitPlayModeRef.current = onExitPlayMode;
 
-  // Reinicializar engine cuando cambie el mapa
+  // Reinicializar engine cuando cambie el mapa o se entre al Modo Play
   useEffect(() => {
     playEngineRef.current.init(beatmap.hitObjects, beatmap.keyCount);
-  }, [beatmap]);
+  }, [beatmap, isPlayMode]);
 
   const palette = useMemo(() => buildPlayfieldPalette(beatmap.keyCount), [beatmap.keyCount]);
   paletteRef.current = palette;
@@ -399,6 +416,14 @@ function SinglePlayfieldCanvas({
         debugHitWindows: debugHitWindowsRef.current,
         showLaneSeparators: isPlayModeRef.current ? showLaneSeparatorsRef.current : true,
         noteHeight: noteHeightRef.current,
+        recentHitErrors: isPlayModeRef.current ? playState.recentHitErrors : null,
+        showHitError: showHitErrorRef.current,
+        lastJudgement: isPlayModeRef.current ? playState.lastJudgement : null,
+        hitPositionOffset: isPlayModeRef.current ? hitPositionOffsetRef.current : 40,
+        isCompleted:
+          isPlayModeRef.current &&
+          playback.durationMs > 0 &&
+          effectiveTimeMs >= playback.durationMs - 200,
       },
     );
   }

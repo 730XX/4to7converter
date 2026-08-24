@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, Sparkles, X, CornerDownLeft, Layers } from "lucide-react";
-import { searchBeatmaps, type BeatmapSearchItem } from "../lib/native";
+import { Search, Sparkles, X, CornerDownLeft } from "lucide-react";
+import { searchBeatmaps, toAssetUrl, type BeatmapSearchItem } from "../lib/native";
 
 interface QuickSearchModalProps {
   isOpen: boolean;
@@ -28,14 +28,12 @@ export function QuickSearchModal({
   const listRef = useRef<HTMLDivElement | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
 
-  // Inicializar foco y limpiar al abrir
+  // Al abrir, solo enfocar el input sin borrar el texto ni los resultados previos
   useEffect(() => {
     if (isOpen) {
-      setQuery("");
-      setResults([]);
-      setSelectedIndex(0);
       const timer = window.setTimeout(() => {
         inputRef.current?.focus();
+        inputRef.current?.select();
       }, 30);
       return () => window.clearTimeout(timer);
     }
@@ -72,7 +70,7 @@ export function QuickSearchModal({
       } finally {
         setIsLoading(false);
       }
-    }, 30);
+    }, 40);
 
     return () => {
       if (debounceTimerRef.current !== null) {
@@ -157,6 +155,7 @@ export function QuickSearchModal({
               className="quick-search-clear-btn"
               onClick={() => {
                 setQuery("");
+                setResults([]);
                 inputRef.current?.focus();
               }}
               title="Borrar búsqueda"
@@ -177,67 +176,16 @@ export function QuickSearchModal({
           onWheel={(e) => e.stopPropagation()}
         >
           {results.length > 0 ? (
-            results.map((item, index) => {
-              const isSelected = index === selectedIndex;
-              const titleDisplay = item.title || item.folder_name || "Sin título";
-
-              return (
-                <div
-                  key={`${item.path}-${index}`}
-                  className={`quick-search-card${isSelected ? " is-selected" : ""}`}
-                  onClick={() => handleSelect(item.path)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  <div className="quick-search-card-left">
-                    <div className="quick-search-card-avatar is-mania">
-                      <Layers size={18} />
-                    </div>
-                    <div className="quick-search-card-details">
-                      <div className="quick-search-card-title-row">
-                        <span className="quick-search-card-title" title={titleDisplay}>
-                          {titleDisplay}
-                        </span>
-                        {item.artist && (
-                          <span className="quick-search-card-artist" title={item.artist}>
-                            {item.artist}
-                          </span>
-                        )}
-                      </div>
-                      <div className="quick-search-card-sub-row">
-                        <span className="quick-search-card-diff">
-                          {item.diff_count} {item.diff_count === 1 ? "dificultad" : "dificultades"}
-                        </span>
-                        {item.creator && (
-                          <span className="quick-search-card-creator">
-                            • mapeado por {item.creator}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="quick-search-card-right">
-                    <div className="quick-search-modes-group">
-                      {item.key_modes.map((mode) => (
-                        <span
-                          key={mode}
-                          className={`quick-search-key-badge ${
-                            mode === "4K" ? "is-4k" : mode === "7K" ? "is-7k" : ""
-                          }`}
-                        >
-                          {mode}
-                        </span>
-                      ))}
-                    </div>
-                    {isSelected && (
-                      <div className="quick-search-select-hint">
-                        <CornerDownLeft size={14} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            results.map((item, index) => (
+              <QuickSearchCardItem
+                key={`${item.path}-${index}`}
+                item={item}
+                index={index}
+                isSelected={index === selectedIndex}
+                onSelect={handleSelect}
+                onMouseEnter={() => setSelectedIndex(index)}
+              />
+            ))
           ) : query.trim() && !isLoading ? (
             <div className="quick-search-empty">
               <Sparkles size={24} className="text-muted" />
@@ -257,6 +205,113 @@ export function QuickSearchModal({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Subcomponente de tarjeta individual con IntersectionObserver para Lazy-Loading de imágenes.
+ * Solo descarga y monta la imagen en el DOM cuando la tarjeta es visible en la ventana de scroll.
+ */
+function QuickSearchCardItem({
+  item,
+  isSelected,
+  onSelect,
+  onMouseEnter,
+}: {
+  item: BeatmapSearchItem;
+  index: number;
+  isSelected: boolean;
+  onSelect: (path: string) => void;
+  onMouseEnter: () => void;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "40px" },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const titleDisplay = item.title || item.folder_name || "Sin título";
+  const bgUrl = isVisible && item.background_path ? toAssetUrl(item.background_path) : null;
+
+  return (
+    <div
+      ref={cardRef}
+      className={`quick-search-card${isSelected ? " is-selected" : ""}${bgUrl ? " has-bg" : ""}`}
+      onClick={() => onSelect(item.path)}
+      onMouseEnter={onMouseEnter}
+    >
+      {/* Capa de fondo con imagen real del mapa cargada bajo demanda */}
+      {bgUrl ? (
+        <div
+          className="quick-search-card-bg"
+          style={{ backgroundImage: `url("${bgUrl}")` }}
+          aria-hidden="true"
+        />
+      ) : (
+        <div className="quick-search-card-bg-placeholder" aria-hidden="true" />
+      )}
+      <div className="quick-search-card-overlay" aria-hidden="true" />
+
+      <div className="quick-search-card-left">
+        <div className="quick-search-card-details">
+          <div className="quick-search-card-title-row">
+            <span className="quick-search-card-title" title={titleDisplay}>
+              {titleDisplay}
+            </span>
+            {item.artist && (
+              <span className="quick-search-card-artist" title={item.artist}>
+                {item.artist}
+              </span>
+            )}
+          </div>
+          <div className="quick-search-card-sub-row">
+            <span className="quick-search-card-diff">
+              {item.diff_count} {item.diff_count === 1 ? "dificultad" : "dificultades"}
+            </span>
+            {item.creator && (
+              <span className="quick-search-card-creator">
+                • {item.creator}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="quick-search-card-right">
+        <div className="quick-search-modes-group">
+          {item.key_modes.map((mode) => (
+            <span
+              key={mode}
+              className={`quick-search-key-badge ${
+                mode === "4K" ? "is-4k" : mode === "7K" ? "is-7k" : ""
+              }`}
+            >
+              {mode}
+            </span>
+          ))}
+        </div>
+        {isSelected && (
+          <div className="quick-search-select-hint">
+            <CornerDownLeft size={14} />
+          </div>
+        )}
       </div>
     </div>
   );

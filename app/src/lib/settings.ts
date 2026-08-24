@@ -1,10 +1,26 @@
 /**
+ * Límites y rangos centralizados para todos los parámetros de la aplicación.
+ * Modifica estos valores aquí para que se apliquen en toda la app (sliders, wheel, toasts, validaciones).
+ */
+export const SETTINGS_LIMITS = {
+  scrollSpeed: { min: 10, max: 60, step: 1, default: 25 },
+  volume: { min: 0, max: 100, step: 5, default: 40, },
+  hitsoundVolume: { min: 0, max: 100, step: 5, default: 20, },
+  backdropDim: { min: 0, max: 100, step: 5, default: 60, },
+  playOffsetMs: { min: -150, max: 150, step: 5, default: 0, },
+  comboPositionPercent: { min: 30, max: 85, step: 1, default: 55, },
+  noteHeight: { min: 10, max: 36, step: 1, default: 16, },
+  playStageWidth: { min: 320, max: 800, step: 10, default: 500, },
+  hitPositionOffset: { min: 20, max: 180, step: 5, default: 40, },
+} as const;
+
+/**
  * Preferencias globales del usuario persistidas en localStorage.
  */
 export interface UserSettings {
   volume: number; // 0 - 100
   hitsoundVolume: number; // 0 - 100
-  scrollSpeed: number; // 10 - 40 (1.0x - 4.0x)
+  scrollSpeed: number; // 10 - 60 (1.0x - 6.0x)
   scrollDirection: "down" | "up";
   previewMode: "7k" | "4k" | "split";
   backdropDim: number; // 0 - 100
@@ -17,6 +33,9 @@ export interface UserSettings {
   comboPositionPercent: number; // Altura vertical del combo en porcentaje de la pantalla (30 a 85, default: 55)
   playShowLaneSeparators: boolean; // Mostrar u ocultar las barras divisorias de carriles solo en Modo Play
   noteHeight: number; // Altura en píxeles de las notas (10 a 36, default: 16)
+  playShowHitError: boolean; // Mostrar barra de precisión de timing / hit error en Modo Play
+  playStageWidth: number; // Ancho máximo del contenedor en Modo Play (320 a 800, default: 500)
+  hitPositionOffset: number; // Distancia de la línea de juicio desde el borde en px (20 a 180, default: 40)
 }
 
 export const DEFAULT_KEYBINDS_7K: string[] = [
@@ -30,21 +49,24 @@ export const DEFAULT_KEYBINDS_7K: string[] = [
 ];
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  volume: 80,
-  hitsoundVolume: 80,
-  scrollSpeed: 25,
+  volume: SETTINGS_LIMITS.volume.default,
+  hitsoundVolume: SETTINGS_LIMITS.hitsoundVolume.default,
+  scrollSpeed: SETTINGS_LIMITS.scrollSpeed.default,
   scrollDirection: "down",
   previewMode: "7k",
-  backdropDim: 60,
+  backdropDim: SETTINGS_LIMITS.backdropDim.default,
   playfieldWidth: "normal",
   hitGlow: true,
   hitsounds: true,
   diffSuffix: "(7K)",
   keybinds7k: DEFAULT_KEYBINDS_7K,
-  playOffsetMs: 0,
-  comboPositionPercent: 55,
+  playOffsetMs: SETTINGS_LIMITS.playOffsetMs.default,
+  comboPositionPercent: SETTINGS_LIMITS.comboPositionPercent.default,
   playShowLaneSeparators: true,
-  noteHeight: 16,
+  noteHeight: SETTINGS_LIMITS.noteHeight.default,
+  playShowHitError: true,
+  playStageWidth: SETTINGS_LIMITS.playStageWidth.default,
+  hitPositionOffset: SETTINGS_LIMITS.hitPositionOffset.default,
 };
 
 /**
@@ -102,6 +124,18 @@ export function loadSettings(): UserSettings {
         typeof parsed.playOffsetMs === "number" && !isNaN(parsed.playOffsetMs)
           ? parsed.playOffsetMs
           : DEFAULT_SETTINGS.playOffsetMs,
+      playShowHitError:
+        typeof parsed.playShowHitError === "boolean"
+          ? parsed.playShowHitError
+          : DEFAULT_SETTINGS.playShowHitError,
+      playStageWidth:
+        typeof parsed.playStageWidth === "number" && !isNaN(parsed.playStageWidth)
+          ? parsed.playStageWidth
+          : DEFAULT_SETTINGS.playStageWidth,
+      hitPositionOffset:
+        typeof parsed.hitPositionOffset === "number" && !isNaN(parsed.hitPositionOffset)
+          ? parsed.hitPositionOffset
+          : DEFAULT_SETTINGS.hitPositionOffset,
     };
   } catch {
     return DEFAULT_SETTINGS;

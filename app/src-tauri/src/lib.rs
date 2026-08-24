@@ -167,11 +167,21 @@ fn find_background_filename(content: &str) -> Option<String> {
 
 #[tauri::command]
 fn splash_screen(app: AppHandle) -> Result<(), String> {
+    // Si aún no está listo el índice en memoria, construirlo antes de dar paso
+    if let Ok(mut guard) = SEARCH_INDEX.lock() {
+        if guard.is_none() {
+            if let Some(songs_dir) = resolve_songs_dir(&None) {
+                *guard = Some(build_search_index(&songs_dir));
+            }
+        }
+    }
+
     if let Some(splash) = app.get_webview_window("splashscreen") {
         let _ = splash.close();
     }
     if let Some(main) = app.get_webview_window("main") {
         main.show().map_err(|e| e.to_string())?;
+        let _ = main.set_focus();
     } else {
         return Err("main window not found".into());
     }
@@ -331,6 +341,7 @@ pub struct BeatmapSearchItem {
     pub diff_count: usize,
     pub key_modes: Vec<String>,
     pub preview_version: String,
+    pub background_path: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +359,7 @@ struct IndexedMapset {
     diff_count: usize,
     key_modes: Vec<String>,
     preview_version: String,
+    pub background_path: Option<String>,
     /// Texto precalculado en lowercase para búsqueda instantánea sin allocations.
     search_text: String,
 }
@@ -490,6 +502,19 @@ fn build_search_index(songs_dir: &Path) -> Vec<IndexedMapset> {
             first_meta.creator.to_lowercase(),
         );
 
+        // Resolver background_path (primero desde el archivo parsed, luego fallback a scan de imágenes de la carpeta)
+        let background_path = if let Some(ref bg_file) = first_meta.background_filename {
+            let direct = folder_path.join(bg_file.replace('\\', "/"));
+            if direct.exists() && direct.is_file() {
+                Some(direct.to_string_lossy().into_owned())
+            } else {
+                // Si la ruta directa no existe, buscar en la carpeta
+                find_image_fallback_in_dir(&folder_path)
+            }
+        } else {
+            find_image_fallback_in_dir(&folder_path)
+        };
+
         index.push(IndexedMapset {
             path: osu_files[0].to_string_lossy().into_owned(),
             title: first_meta.title,
@@ -499,11 +524,45 @@ fn build_search_index(songs_dir: &Path) -> Vec<IndexedMapset> {
             diff_count,
             key_modes: key_modes_set.into_iter().collect(),
             preview_version: first_meta.version,
+            background_path,
             search_text,
         });
     }
 
     index
+}
+
+/// Fallback rápido para encontrar la imagen de fondo principal en un directorio
+fn find_image_fallback_in_dir(dir: &Path) -> Option<String> {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        let mut candidates: Vec<(std::path::PathBuf, u64, bool)> = Vec::new();
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(ext) = p.extension() {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    if ext_str == "jpg" || ext_str == "jpeg" || ext_str == "png" || ext_str == "webp" {
+                        let fname_lower = p.file_name().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+                        let is_named_bg = fname_lower.contains("bg") || fname_lower.contains("background");
+                        let size = entry.metadata().ok().map(|m| m.len()).unwrap_or(0);
+                        candidates.push((p, size, is_named_bg));
+                    }
+                }
+            }
+        }
+
+        if !candidates.is_empty() {
+            candidates.sort_by(|a, b| {
+                if a.2 != b.2 {
+                    b.2.cmp(&a.2)
+                } else {
+                    b.1.cmp(&a.1)
+                }
+            });
+            return Some(candidates[0].0.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 
 #[tauri::command]
@@ -549,6 +608,7 @@ async fn search_beatmaps(
                 diff_count: m.diff_count,
                 key_modes: m.key_modes.clone(),
                 preview_version: m.preview_version.clone(),
+                background_path: m.background_path.clone(),
             })
             .collect();
 
@@ -573,6 +633,7 @@ struct QuickMeta {
     version: String,
     mode: u8,
     key_count: u8,
+    background_filename: Option<String>,
 }
 
 fn parse_osu_quick_meta(path: &Path) -> Option<QuickMeta> {
@@ -586,6 +647,7 @@ fn parse_osu_quick_meta(path: &Path) -> Option<QuickMeta> {
     let mut version = String::new();
     let mut mode: u8 = 0;
     let mut key_count: u8 = 4;
+    let mut background_filename: Option<String> = None;
     let mut in_section = String::new();
 
     for line_res in reader.lines() {
@@ -621,6 +683,18 @@ fn parse_osu_quick_meta(path: &Path) -> Option<QuickMeta> {
             if let Some(val) = trimmed.strip_prefix("CircleSize:") {
                 key_count = val.trim().parse().unwrap_or(4);
             }
+        } else if in_section == "[events]" && background_filename.is_none() {
+            if !trimmed.is_empty() && !trimmed.starts_with("//") {
+                let parts: Vec<&str> = trimmed.split(',').collect();
+                for part in &parts {
+                    let candidate = part.trim().trim_matches('"').trim_matches('\'').trim();
+                    let lower = candidate.to_lowercase();
+                    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".png") || lower.ends_with(".webp") || lower.ends_with(".bmp") {
+                        background_filename = Some(candidate.to_string());
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -631,6 +705,7 @@ fn parse_osu_quick_meta(path: &Path) -> Option<QuickMeta> {
         version,
         mode,
         key_count,
+        background_filename,
     })
 }
 
@@ -649,18 +724,9 @@ pub fn run() {
 
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(1600));
-                if let Some(splash) = handle.get_webview_window("splashscreen") {
-                    let _ = splash.close();
-                }
-                if let Some(main) = handle.get_webview_window("main") {
-                    let _ = main.show();
-                    let _ = main.set_focus();
-                }
-            });
+                let start = std::time::Instant::now();
 
-            // Calentar e indexar canciones de osu! en segundo plano silenciosamente
-            std::thread::spawn(|| {
+                // 1. Calentar e indexar canciones de osu! antes de cerrar el splashscreen
                 if let Some(songs_dir) = resolve_songs_dir(&None) {
                     let new_index = build_search_index(&songs_dir);
                     if let Ok(mut guard) = SEARCH_INDEX.lock() {
@@ -668,6 +734,22 @@ pub fn run() {
                             *guard = Some(new_index);
                         }
                     }
+                }
+
+                // 2. Garantizar que el splashscreen se muestre al menos 1200ms por estética
+                let elapsed = start.elapsed();
+                let min_duration = std::time::Duration::from_millis(1200);
+                if elapsed < min_duration {
+                    std::thread::sleep(min_duration - elapsed);
+                }
+
+                // 3. Una vez listos los mapas e índice, cerrar el splash y mostrar la ventana principal
+                if let Some(splash) = handle.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                }
+                if let Some(main) = handle.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
                 }
             });
 

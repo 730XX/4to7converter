@@ -7,6 +7,8 @@ import {
   isNoteVisible,
   type PlayfieldMetrics,
 } from "./preview-math";
+import type { HitErrorEvent, JudgementEvent } from "./play-engine";
+import { HIT_WINDOW_MS } from "./play-engine";
 
 /** Espacio vacío en la parte superior del playfield donde aparecen las notas. */
 export const PLAYFIELD_TOP_PADDING = 60;
@@ -160,6 +162,11 @@ export interface PlayfieldFrameOptions {
   debugHitWindows?: boolean;
   showLaneSeparators?: boolean;
   noteHeight?: number;
+  recentHitErrors?: HitErrorEvent[] | null;
+  showHitError?: boolean;
+  isCompleted?: boolean;
+  lastJudgement?: JudgementEvent | null;
+  hitPositionOffset?: number;
 }
 
 /**
@@ -192,6 +199,11 @@ export function drawPlayfieldFrame(
   let holdingLnIndices: Set<number> | null = null;
   let showLaneSeparators = true;
   let noteHeight = 16;
+  let recentHitErrors: HitErrorEvent[] | null = null;
+  let showHitError = true;
+  let isCompleted = false;
+  let lastJudgement: JudgementEvent | null = null;
+  let hitPositionOffset = PLAYFIELD_HIT_LINE_OFFSET;
 
   if (typeof options === "object") {
     approachMs = options.approachMs ?? PLAYFIELD_APPROACH_MS;
@@ -207,6 +219,11 @@ export function drawPlayfieldFrame(
     holdingLnIndices = options.holdingLnIndices ?? null;
     showLaneSeparators = options.showLaneSeparators ?? true;
     noteHeight = options.noteHeight ?? 16;
+    recentHitErrors = options.recentHitErrors ?? null;
+    showHitError = options.showHitError ?? true;
+    isCompleted = options.isCompleted ?? false;
+    lastJudgement = options.lastJudgement ?? null;
+    hitPositionOffset = options.hitPositionOffset ?? PLAYFIELD_HIT_LINE_OFFSET;
   } else if (typeof options === "number") {
     approachMs = options;
   }
@@ -217,7 +234,7 @@ export function drawPlayfieldFrame(
     typeof options === "object" ? options.debugHitWindows ?? false : false;
 
   const hitLineY =
-    dir === "down" ? height - PLAYFIELD_HIT_LINE_OFFSET : PLAYFIELD_HIT_LINE_OFFSET;
+    dir === "down" ? height - hitPositionOffset : hitPositionOffset;
 
   const metrics: PlayfieldMetrics = {
     width,
@@ -272,7 +289,7 @@ export function drawPlayfieldFrame(
     noteHeight,
   );
 
-  // Si está en Modo Play, dibujar el HUD de Combo a la altura configurada
+  // Si está en Modo Play, dibujar el HUD de Combo, Juicio y la Barra de Hit Error a la altura configurada
   if (isPlayMode) {
     drawComboHud(
       ctx,
@@ -284,6 +301,24 @@ export function drawPlayfieldFrame(
       lastHitTime,
       comboPositionPercent,
     );
+
+    if (lastJudgement) {
+      drawJudgement(ctx, width, height, lastJudgement, comboPositionPercent);
+    }
+
+    if (showHitError && recentHitErrors && recentHitErrors.length > 0) {
+      drawHitErrorBar(
+        ctx,
+        width,
+        height,
+        recentHitErrors,
+        comboPositionPercent,
+      );
+    }
+
+    if (isCompleted) {
+      drawStageClear(ctx, width, height, comboPositionPercent);
+    }
   }
 }
 
@@ -505,7 +540,7 @@ function drawNotes(
       ctx.globalAlpha = isPassed
         ? RENDER_CONFIG.notes.rice.passedAlpha
         : RENDER_CONFIG.notes.rice.fallingAlpha;
-      drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight);
+      drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight, scrollDirection);
     } else {
       // Hold Note (LN)
       // En Modo Play: si el usuario la está sosteniendo activamente, forzar estado "holding"
@@ -518,15 +553,15 @@ function drawNotes(
         // Presionada: Color y brillo configurables, head fija en la hit line
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.holdingAlpha;
         const effectiveHeadY = metrics.hitLineY;
-        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY!, noteWidth, skin, true, noteHeight);
+        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY!, noteWidth, skin, true, noteHeight, scrollDirection);
       } else if (isFalling) {
         // Cayendo: Opacidad configurable
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.fallingAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight);
+        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight, scrollDirection);
       } else {
         // Ya completada / Pasada
         ctx.globalAlpha = RENDER_CONFIG.notes.ln.passedAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight);
+        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight, scrollDirection);
       }
     }
   }
@@ -571,17 +606,10 @@ function drawComboHud(
     ctx.shadowColor = "rgba(255, 255, 255, 0.4)";
     ctx.shadowBlur = 12;
 
-    // Número del Combo
+    // Número del Combo centrado
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 36px 'Inter', system-ui, -apple-system, sans-serif";
-    ctx.fillText(String(combo), 0, -8);
-
-    // Etiqueta "COMBO"
-    ctx.shadowBlur = 4;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
-    ctx.font = "800 11px 'Inter', system-ui, sans-serif";
-    ctx.letterSpacing = "3px";
-    ctx.fillText("COMBO", 0, 16);
+    ctx.fillText(String(combo), 0, 0);
   } else if (lastBrokenCombo > 0 && now - comboBreakTime < 600) {
     // 2. Animación de Combo Roto (decremento y desvanecimiento suave a 0)
     const elapsed = now - comboBreakTime;
@@ -598,18 +626,236 @@ function drawComboHud(
     // Número anterior desvaneciéndose en color rojo/rosado suave
     ctx.fillStyle = "#f43f5e";
     ctx.font = "900 32px 'Inter', system-ui, -apple-system, sans-serif";
-    ctx.fillText(String(lastBrokenCombo), 0, -8);
-
-    ctx.fillStyle = "rgba(244, 63, 94, 0.7)";
-    ctx.font = "800 11px 'Inter', system-ui, sans-serif";
-    ctx.letterSpacing = "3px";
-    ctx.fillText("MISS", 0, 16);
+    ctx.fillText(String(lastBrokenCombo), 0, 0);
   }
 
   ctx.restore();
 }
 
-/** Dibuja una nota normal con efecto 3D metálico con brillo superior y base más oscura. */
+/**
+ * Dibuja el texto flotante de juicio (MAX, PERFECT, GREAT, GOOD, MISS)
+ * con micro-animación elástica de impacto y desvanecimiento suave.
+ */
+function drawJudgement(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  judgement: JudgementEvent,
+  comboPositionPercent: number = 55,
+): void {
+  const now = performance.now();
+  const elapsed = now - judgement.timestamp;
+  const DURATION_MS = 500;
+
+  if (elapsed >= DURATION_MS) {
+    return;
+  }
+
+  const centerX = width / 2;
+  // Ubicado de manera natural justo debajo del texto "COMBO" y arriba de la error bar (+22px)
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 22;
+
+  // 1. Cálculo de escala elástica (impacto inicial: 1.25 -> 1.0 en los primeros 100ms)
+  let scale = 1.0;
+  if (elapsed < 100) {
+    const p = elapsed / 100;
+    scale = 1.25 - p * 0.25;
+  }
+
+  // 2. Cálculo de desvanecimiento (fade out cuadrático)
+  const progress = elapsed / DURATION_MS;
+  const alpha = Math.max(0, 1 - progress * progress);
+
+  // 3. Pequeño desplazamiento hacia arriba (o caída con temblor si es MISS)
+  let offsetY = -progress * 8;
+  let offsetX = 0;
+  if (judgement.tier === "MISS") {
+    offsetY = progress * 6;
+    if (elapsed < 150) {
+      // Sutil shake horizontal en los primeros 150ms de un Miss
+      offsetX = Math.sin(elapsed * 0.1) * 3 * (1 - elapsed / 150);
+    }
+  }
+
+  ctx.save();
+  ctx.translate(centerX + offsetX, baseY + offsetY);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Estilos según el tier de juicio
+  let textColor = "#38bdf8";
+  let glowColor = "rgba(56, 189, 248, 0.8)";
+  let label = judgement.tier;
+
+  switch (judgement.tier) {
+    case "MAX":
+      textColor = "#38bdf8"; // Cian Neón
+      glowColor = "rgba(56, 189, 248, 0.85)";
+      break;
+    case "PERFECT":
+      textColor = "#fbbf24"; // Dorado Brillante
+      glowColor = "rgba(251, 191, 36, 0.85)";
+      break;
+    case "GREAT":
+      textColor = "#34d399"; // Verde Esmeralda
+      glowColor = "rgba(52, 211, 153, 0.75)";
+      break;
+    case "GOOD":
+      textColor = "#818cf8"; // Azul Púrpura
+      glowColor = "rgba(129, 140, 248, 0.75)";
+      break;
+    case "MISS":
+      textColor = "#f43f5e"; // Rojo Rosado
+      glowColor = "rgba(244, 63, 94, 0.75)";
+      break;
+  }
+
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = elapsed < 120 ? 14 : 6;
+  ctx.fillStyle = textColor;
+  ctx.font = "900 15px 'Inter', system-ui, -apple-system, sans-serif";
+  ctx.letterSpacing = "2px";
+  ctx.fillText(label, 0, 0);
+
+  ctx.restore();
+}
+
+/**
+ * Dibuja la barra dinámica y transparente de precisión (Hit Error Bar)
+ * anclada debajo del combo. En reposo es 100% invisible; al pulsar teclas
+ * dibuja ticks efímeros que indican el desvío exacto en ms (early/late).
+ */
+function drawHitErrorBar(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  recentHitErrors: HitErrorEvent[],
+  comboPositionPercent: number = 55,
+): void {
+  const now = performance.now();
+  const FADE_DURATION_MS = 1200;
+
+  // Filtrar eventos que no hayan expirado
+  const activeHits = recentHitErrors.filter((hit) => now - hit.timestamp < FADE_DURATION_MS);
+  if (activeHits.length === 0) {
+    return;
+  }
+
+  const centerX = width / 2;
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 38;
+
+  const barWidth = 170;
+  const halfBar = barWidth / 2;
+  const barHeight = 4;
+
+  // Opacidad global de la barra basada en la frescura del hit más reciente
+  const mostRecentTime = Math.max(...activeHits.map((h) => h.timestamp));
+  const timeSinceLastHit = now - mostRecentTime;
+  const baseBarAlpha = Math.max(0, Math.min(1, 1 - timeSinceLastHit / FADE_DURATION_MS));
+
+  ctx.save();
+
+  // 1. Línea base sutil de la barra con degradado suave
+  const barGrad = ctx.createLinearGradient(centerX - halfBar, 0, centerX + halfBar, 0);
+  barGrad.addColorStop(0, "rgba(56, 189, 248, 0)"); // azul transparente en los extremos
+  barGrad.addColorStop(0.2, `rgba(56, 189, 248, ${0.35 * baseBarAlpha})`); // Early
+  barGrad.addColorStop(0.5, `rgba(255, 255, 255, ${0.65 * baseBarAlpha})`); // Center
+  barGrad.addColorStop(0.8, `rgba(249, 115, 22, ${0.35 * baseBarAlpha})`); // Late
+  barGrad.addColorStop(1, "rgba(249, 115, 22, 0)"); // naranja transparente en los extremos
+
+  ctx.fillStyle = barGrad;
+  ctx.fillRect(centerX - halfBar, baseY - barHeight / 2, barWidth, barHeight);
+
+  // 2. Marca guía central (0ms / Perfect)
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * baseBarAlpha})`;
+  ctx.fillRect(centerX - 1, baseY - 6, 2, 12);
+
+  // 3. Ticks de los hits recientes
+  for (let i = 0; i < activeHits.length; i++) {
+    const hit = activeHits[i];
+    const age = now - hit.timestamp;
+    const progress = age / FADE_DURATION_MS;
+    const alpha = Math.max(0, 1 - progress);
+
+    // Clampear el error dentro de la ventana de hit
+    const clampedError = Math.max(-HIT_WINDOW_MS, Math.min(HIT_WINDOW_MS, hit.errorMs));
+    const ratio = clampedError / HIT_WINDOW_MS; // -1.0 a +1.0
+    const tickX = Math.round(centerX + ratio * (halfBar - 4));
+
+    // Determinar color según precisión
+    const absError = Math.abs(hit.errorMs);
+    let tickColor: string;
+    let glowColor: string;
+
+    if (absError <= 22) {
+      // Perfect / Exacto: Dorado brillante
+      tickColor = `rgba(251, 191, 36, ${alpha})`;
+      glowColor = "rgba(251, 191, 36, 0.6)";
+    } else if (hit.errorMs < 0) {
+      // Early / Temprano: Azul cian
+      tickColor = `rgba(56, 189, 248, ${alpha})`;
+      glowColor = "rgba(56, 189, 248, 0.5)";
+    } else {
+      // Late / Tarde: Naranja / Rojo suave
+      tickColor = `rgba(249, 115, 22, ${alpha})`;
+      glowColor = "rgba(249, 115, 22, 0.5)";
+    }
+
+    ctx.fillStyle = tickColor;
+    if (age < 200) {
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 6;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+
+    // Tick vertical nítido de 2px de ancho
+    ctx.fillRect(tickX - 1, baseY - 5, 2, 10);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Dibuja un banner flotante y estilizado de "STAGE CLEAR" / "MAPA COMPLETADO"
+ * cuando la canción finaliza mientras se está en Modo Play.
+ */
+function drawStageClear(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  comboPositionPercent: number = 55,
+): void {
+  const centerX = width / 2;
+  // Subir el banner significativamente para que quede despejado arriba del combo (-95px)
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) - 95;
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Sombra brillante en tono esmeralda / dorado
+  ctx.shadowColor = "rgba(16, 185, 129, 0.6)";
+  ctx.shadowBlur = 20;
+
+  // Texto principal
+  ctx.fillStyle = "#10b981";
+  ctx.font = "900 30px 'Inter', system-ui, -apple-system, sans-serif";
+  ctx.fillText("STAGE CLEAR", centerX, baseY);
+
+  // Subtexto instructivo
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  ctx.font = "700 12px 'Inter', system-ui, sans-serif";
+  ctx.letterSpacing = "2px";
+  ctx.fillText("Esc para salir", centerX, baseY + 28);
+
+  ctx.restore();
+}
+
+/** Dibuja la barra rectangular metálica de una nota con borde iluminado. */
 function drawNoteBar(
   ctx: CanvasRenderingContext2D,
   centerX: number,
@@ -617,9 +863,13 @@ function drawNoteBar(
   noteWidth: number,
   skin: LaneSkinColor,
   noteHeight: number = 16,
+  scrollDirection: "down" | "up" = "down",
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
-  const topY = Math.round(y - noteHeight / 2);
+  // Al crecer el tamaño de la nota:
+  // En downscroll: la base inferior de la nota se ancla exactamente en `y` (hitLine), creciendo hacia arriba.
+  // En upscroll: la base superior de la nota se ancla exactamente en `y` (hitLine), creciendo hacia abajo.
+  const topY = scrollDirection === "down" ? Math.round(y - noteHeight) : Math.round(y);
 
   const grad = ctx.createLinearGradient(0, topY, 0, topY + noteHeight);
   grad.addColorStop(0, skin.top);
@@ -648,6 +898,7 @@ function drawHoldNoteBar(
   skin: LaneSkinColor,
   isHolding: boolean = false,
   noteHeight: number = 16,
+  scrollDirection: "down" | "up" = "down",
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
   const top = Math.min(headY, tailY);
@@ -674,7 +925,7 @@ function drawHoldNoteBar(
   ctx.fillRect(x + 1, tailY - 1, noteWidth - 2, 2);
 
   // Cabeza de la nota
-  drawNoteBar(ctx, centerX, headY, noteWidth, skin, noteHeight);
+  drawNoteBar(ctx, centerX, headY, noteWidth, skin, noteHeight, scrollDirection);
 }
 
 /**

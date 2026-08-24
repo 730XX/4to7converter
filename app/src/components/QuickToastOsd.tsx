@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Gauge, Volume2 } from "lucide-react";
+import { SETTINGS_LIMITS } from "../lib/settings";
 
 export interface OsdState {
   type: "audio" | "speed" | "export";
@@ -86,8 +87,11 @@ export function QuickToastOsd({ osd }: QuickToastOsdProps) {
   }
 
   if (renderedOsd.type === "speed") {
-    const speed = renderedOsd.scrollSpeed ?? 25;
-    const percentage = Math.max(0, Math.min(100, ((speed - 10) / 30) * 100));
+    const speed = renderedOsd.scrollSpeed ?? SETTINGS_LIMITS.scrollSpeed.default;
+    const min = SETTINGS_LIMITS.scrollSpeed.min;
+    const max = SETTINGS_LIMITS.scrollSpeed.max;
+    // Rango dinámico calculado desde SETTINGS_LIMITS
+    const percentage = Math.max(0, Math.min(100, ((speed - min) / (max - min)) * 100));
     const displayValue = `${(speed / 10).toFixed(1)}x`;
 
     return (

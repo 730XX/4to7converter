@@ -243,10 +243,10 @@ export function PlaybackFooter({
           type="button"
           className={`preview-button preview-button--play-mode${isPlayMode ? " is-active" : ""}`}
           onClick={onTogglePlayMode}
-          title={isPlayMode ? "Cambiar a Modo Preview (Autoplay)" : "Cambiar a Modo Play (Interactuable)"}
+          title={isPlayMode ? "Cambiar a Modo Preview (Autoplay)" : "Testear mapa (jugable)"}
         >
           {isPlayMode ? <Gamepad2 size={16} /> : <Eye size={16} />}
-          <span>{isPlayMode ? "Modo Play" : "Preview"}</span>
+          <span>{isPlayMode ? "Modo Play" : "Test"}</span>
         </button>
       )}
 

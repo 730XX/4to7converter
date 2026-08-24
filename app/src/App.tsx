@@ -15,6 +15,7 @@ import { LaneMapper } from "./components/LaneMapper";
 import { PlaybackFooter } from "./components/PlaybackFooter";
 import { Playfield } from "./components/Playfield";
 import { QuickSearchModal } from "./components/QuickSearchModal";
+import { QuickDiffSwitcherModal } from "./components/QuickDiffSwitcherModal";
 import { QuickToastOsd, type OsdState } from "./components/QuickToastOsd";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { KeybindsModal } from "./components/KeybindsModal";
@@ -38,7 +39,7 @@ import {
   toLaneMap,
   type LaneMapState,
 } from "./lib/lane-map-state";
-import { loadSettings, saveSettings, type UserSettings } from "./lib/settings";
+import { loadSettings, saveSettings, SETTINGS_LIMITS, type UserSettings } from "./lib/settings";
 import {
   getTimingSections,
   getKiaiIntervals,
@@ -84,6 +85,7 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDiffSwitcherOpen, setIsDiffSwitcherOpen] = useState(false);
   const [isKeybindsModalOpen, setIsKeybindsModalOpen] = useState(false);
   const [isPlayMode, setIsPlayMode] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
@@ -125,9 +127,17 @@ export default function App() {
       }
 
       // Ctrl + P: Búsqueda rápida estilo PowerToys Run (activo incluso si hay foco en inputs)
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyP") {
         event.preventDefault();
         setIsQuickSearchOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl + Tab: Abrir selector rápido de dificultades del Mapset
+      if ((event.ctrlKey || event.metaKey) && event.code === "Tab") {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDiffSwitcherOpen(true);
         return;
       }
 
@@ -137,14 +147,14 @@ export default function App() {
       }
 
       // Ctrl + O: Abrir/Cerrar Opciones
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyO") {
         event.preventDefault();
         setIsSettingsOpen((prev) => !prev);
         return;
       }
 
       // Escape: Salir del Modo Play inmediatamente
-      if (event.key === "Escape") {
+      if (event.code === "Escape") {
         setIsPlayMode((prev) => {
           if (prev) {
             event.preventDefault();
@@ -154,8 +164,8 @@ export default function App() {
         });
       }
 
-      // Tab: Intercalar entre 7K y Split (desactivado en Modo Play)
-      if (event.key === "Tab") {
+      // Tab solo (sin Ctrl, Alt ni Shift): Intercalar entre 7K y Split (desactivado en Modo Play)
+      if (event.code === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         if (isPlayModeRef.current) {
           return;
@@ -176,12 +186,23 @@ export default function App() {
     }
 
     function handleWheel(event: WheelEvent): void {
+      // Si el selector de dificultades, búsqueda rápida u opciones están abiertos, permitir navegación y scroll natural
+      const isInsideModalOrSwitcher = (event.target as HTMLElement | null)?.closest?.(
+        ".quick-diff-dialog, .quick-diff-overlay, .quick-search-dialog, .quick-search-overlay, .settings-content, .debug-console-body, .modal-dialog",
+      );
+      if (isDiffSwitcherOpen || isInsideModalOrSwitcher) {
+        return;
+      }
+
       // 1. Ctrl + Alt + Rueda: Volumen de Hitsounds (Independiente)
       if ((event.ctrlKey || event.metaKey) && event.altKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? 5 : -5;
+        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.hitsoundVolume.step : -SETTINGS_LIMITS.hitsoundVolume.step;
         setSettings((prev) => {
-          const nextHitVol = Math.max(0, Math.min(100, (prev.hitsoundVolume ?? 70) + delta));
+          const nextHitVol = Math.max(
+            SETTINGS_LIMITS.hitsoundVolume.min,
+            Math.min(SETTINGS_LIMITS.hitsoundVolume.max, (prev.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default) + delta),
+          );
           triggerOsd({
             type: "audio",
             volume: prev.volume,
@@ -199,13 +220,16 @@ export default function App() {
       // 2. Ctrl + Rueda: Velocidad de Scroll (Scroll Speed)
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? 1 : -1;
+        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.scrollSpeed.step : -SETTINGS_LIMITS.scrollSpeed.step;
         setSettings((prev) => {
-          const nextSpeed = Math.max(10, Math.min(40, prev.scrollSpeed + delta));
+          const nextSpeed = Math.max(
+            SETTINGS_LIMITS.scrollSpeed.min,
+            Math.min(SETTINGS_LIMITS.scrollSpeed.max, prev.scrollSpeed + delta),
+          );
           triggerOsd({
             type: "speed",
             volume: prev.volume,
-            hitsoundVolume: prev.hitsoundVolume ?? 70,
+            hitsoundVolume: prev.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default,
             scrollSpeed: nextSpeed,
             activeParam: "scroll",
           });
@@ -220,13 +244,16 @@ export default function App() {
       // 3. Alt + Rueda: Volumen de la música
       if (event.altKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? 5 : -5;
+        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.volume.step : -SETTINGS_LIMITS.volume.step;
         setSettings((prev) => {
-          const nextVol = Math.max(0, Math.min(100, prev.volume + delta));
+          const nextVol = Math.max(
+            SETTINGS_LIMITS.volume.min,
+            Math.min(SETTINGS_LIMITS.volume.max, prev.volume + delta),
+          );
           triggerOsd({
             type: "audio",
             volume: nextVol,
-            hitsoundVolume: prev.hitsoundVolume ?? 70,
+            hitsoundVolume: prev.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default,
             activeParam: "music",
           });
           return {
@@ -257,8 +284,8 @@ export default function App() {
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
     window.addEventListener("wheel", handleWheel, { passive: false });
 
     function handleResize(): void {
@@ -273,8 +300,8 @@ export default function App() {
     window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("wheel", handleWheel);
       window.removeEventListener("resize", handleResize);
     };
@@ -670,6 +697,9 @@ export default function App() {
               comboPositionPercent={settings.comboPositionPercent}
               playShowLaneSeparators={settings.playShowLaneSeparators}
               noteHeight={settings.noteHeight}
+              playShowHitError={settings.playShowHitError}
+              playStageWidth={settings.playStageWidth}
+              hitPositionOffset={settings.hitPositionOffset}
               onExitPlayMode={() => setIsPlayMode(false)}
             />
           </section>
@@ -679,7 +709,15 @@ export default function App() {
           beatmap={converted ?? source}
           onExport={handleExport}
           isPlayMode={isPlayMode}
-          onTogglePlayMode={() => setIsPlayMode((prev) => !prev)}
+          onTogglePlayMode={() => {
+            setIsPlayMode((prev) => {
+              const next = !prev;
+              if (next && !playback.isPlaying) {
+                playback.play();
+              }
+              return next;
+            });
+          }}
         />
       </main>
 
@@ -703,6 +741,14 @@ export default function App() {
         onClose={() => setIsQuickSearchOpen(false)}
         onSelectBeatmap={(path) => void handlePathSelected(path)}
         currentBeatmapPath={sourcePath}
+      />
+
+      <QuickDiffSwitcherModal
+        isOpen={isDiffSwitcherOpen}
+        onClose={() => setIsDiffSwitcherOpen(false)}
+        difficulties={difficulties}
+        currentPath={sourcePath}
+        onSelectDifficulty={(newPath) => void handlePathSelected(newPath)}
       />
 
       <QuickToastOsd osd={osd} />

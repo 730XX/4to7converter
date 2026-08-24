@@ -136,6 +136,7 @@ export interface BeatmapSearchItem {
   diff_count: number;
   key_modes: string[];
   preview_version: string;
+  background_path?: string | null;
 }
 
 /**

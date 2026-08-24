@@ -14,7 +14,7 @@ import {
   Layers,
   HelpCircle,
 } from "lucide-react";
-import { formatKeyCode, type UserSettings } from "../lib/settings";
+import { formatKeyCode, SETTINGS_LIMITS, type UserSettings } from "../lib/settings";
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -53,6 +53,8 @@ export function SettingsDrawer({
     comboPositionPercent = 55,
     playShowLaneSeparators = true,
     noteHeight = 16,
+    playStageWidth = 500,
+    hitPositionOffset = 40,
   } = settings;
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
@@ -185,9 +187,9 @@ export function SettingsDrawer({
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <input
                       type="range"
-                      min={-150}
-                      max={150}
-                      step={5}
+                      min={SETTINGS_LIMITS.playOffsetMs.min}
+                      max={SETTINGS_LIMITS.playOffsetMs.max}
+                      step={SETTINGS_LIMITS.playOffsetMs.step}
                       value={playOffsetMs}
                       onChange={(e) => update("playOffsetMs", Number(e.target.value))}
                       className="settings-slider"
@@ -217,11 +219,53 @@ export function SettingsDrawer({
                   </div>
                   <input
                     type="range"
-                    min={30}
-                    max={85}
-                    step={1}
+                    min={SETTINGS_LIMITS.comboPositionPercent.min}
+                    max={SETTINGS_LIMITS.comboPositionPercent.max}
+                    step={SETTINGS_LIMITS.comboPositionPercent.step}
                     value={comboPositionPercent}
                     onChange={(e) => update("comboPositionPercent", Number(e.target.value))}
+                    className="settings-slider"
+                  />
+                </div>
+
+                <div className="settings-item">
+                  <div className="settings-item-info">
+                    <div className="settings-item-label-group">
+                      <span className="settings-item-label">Ancho del Playfield</span>
+                      <span className="settings-item-hint">
+                        Ancho total del escenario en Modo Play (320px compacto, 800px ancho)
+                      </span>
+                    </div>
+                    <span className="settings-item-value mono">{playStageWidth}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={SETTINGS_LIMITS.playStageWidth.min}
+                    max={SETTINGS_LIMITS.playStageWidth.max}
+                    step={SETTINGS_LIMITS.playStageWidth.step}
+                    value={playStageWidth}
+                    onChange={(e) => update("playStageWidth", Number(e.target.value))}
+                    className="settings-slider"
+                  />
+                </div>
+
+                <div className="settings-item">
+                  <div className="settings-item-info">
+                    <div className="settings-item-label-group">
+                      <span className="settings-item-label">Posición de Línea de Juicio (Hit Position)</span>
+                      <span className="settings-item-hint">
+                        Altura de la línea de golpe desde el borde inferior
+                      </span>
+                    </div>
+                    <span className="settings-item-value mono">{hitPositionOffset}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={SETTINGS_LIMITS.hitPositionOffset.min}
+                    max={SETTINGS_LIMITS.hitPositionOffset.max}
+                    step={SETTINGS_LIMITS.hitPositionOffset.step}
+                    value={hitPositionOffset}
+                    onChange={(e) => update("hitPositionOffset", Number(e.target.value))}
                     className="settings-slider"
                   />
                 </div>
@@ -238,6 +282,23 @@ export function SettingsDrawer({
                     className={`toggle-switch${playShowLaneSeparators ? " is-active" : ""}`}
                     onClick={() => update("playShowLaneSeparators", !playShowLaneSeparators)}
                     aria-pressed={playShowLaneSeparators}
+                  >
+                    <span className="toggle-thumb" />
+                  </button>
+                </div>
+
+                <div className="settings-item settings-item--row">
+                  <div className="settings-item-label-group">
+                    <span className="settings-item-label">Barra de precisión (Hit Error)</span>
+                    <span className="settings-item-hint">
+                      Muestra desvíos early/late debajo del combo al pulsar teclas
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle-switch${settings.playShowHitError !== false ? " is-active" : ""}`}
+                    onClick={() => update("playShowHitError", settings.playShowHitError === false)}
+                    aria-pressed={settings.playShowHitError !== false}
                   >
                     <span className="toggle-thumb" />
                   </button>
@@ -262,8 +323,9 @@ export function SettingsDrawer({
                   </div>
                   <input
                     type="range"
-                    min={10}
-                    max={40}
+                    min={SETTINGS_LIMITS.scrollSpeed.min}
+                    max={SETTINGS_LIMITS.scrollSpeed.max}
+                    step={SETTINGS_LIMITS.scrollSpeed.step}
                     value={scrollSpeed}
                     onChange={(e) => update("scrollSpeed", Number(e.target.value))}
                     className="settings-slider"
@@ -282,9 +344,9 @@ export function SettingsDrawer({
                   </div>
                   <input
                     type="range"
-                    min={10}
-                    max={36}
-                    step={2}
+                    min={SETTINGS_LIMITS.noteHeight.min}
+                    max={SETTINGS_LIMITS.noteHeight.max}
+                    step={SETTINGS_LIMITS.noteHeight.step}
                     value={noteHeight}
                     onChange={(e) => update("noteHeight", Number(e.target.value))}
                     className="settings-slider"
@@ -390,8 +452,9 @@ export function SettingsDrawer({
                   </div>
                   <input
                     type="range"
-                    min={0}
-                    max={100}
+                    min={SETTINGS_LIMITS.backdropDim.min}
+                    max={SETTINGS_LIMITS.backdropDim.max}
+                    step={SETTINGS_LIMITS.backdropDim.step}
                     value={backdropDim}
                     onChange={(e) => update("backdropDim", Number(e.target.value))}
                     className="settings-slider"
@@ -432,8 +495,9 @@ export function SettingsDrawer({
                   </div>
                   <input
                     type="range"
-                    min={0}
-                    max={100}
+                    min={SETTINGS_LIMITS.volume.min}
+                    max={SETTINGS_LIMITS.volume.max}
+                    step={SETTINGS_LIMITS.volume.step}
                     value={volume}
                     onChange={(e) => update("volume", Number(e.target.value))}
                     className="settings-slider"
@@ -459,13 +523,16 @@ export function SettingsDrawer({
                   <div className="settings-item">
                     <div className="settings-item-info">
                       <span className="settings-item-label">Volumen de hitsounds</span>
-                      <span className="settings-item-value mono">{settings.hitsoundVolume ?? 70}%</span>
+                      <span className="settings-item-value mono">
+                        {settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default}%
+                      </span>
                     </div>
                     <input
                       type="range"
-                      min={0}
-                      max={100}
-                      value={settings.hitsoundVolume ?? 70}
+                      min={SETTINGS_LIMITS.hitsoundVolume.min}
+                      max={SETTINGS_LIMITS.hitsoundVolume.max}
+                      step={SETTINGS_LIMITS.hitsoundVolume.step}
+                      value={settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default}
                       onChange={(e) => update("hitsoundVolume", Number(e.target.value))}
                       className="settings-slider"
                     />

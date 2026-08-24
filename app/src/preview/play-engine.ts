@@ -3,6 +3,33 @@ import type { HitObject } from "../../../src/core/osu/types";
 /** Tolerancia de tiempo (en ms) para registrar un acierto (hit) */
 export const HIT_WINDOW_MS = 140;
 
+export type JudgementTier = "MAX" | "PERFECT" | "GREAT" | "GOOD" | "MISS";
+
+export interface JudgementEvent {
+  tier: JudgementTier;
+  /** Timestamp de performance.now() cuando ocurrió el juicio */
+  timestamp: number;
+}
+
+/**
+ * Determina el tier de juicio basado en el desvío absoluto en milisegundos.
+ */
+export function getJudgementTier(errorMs: number): JudgementTier {
+  const abs = Math.abs(errorMs);
+  if (abs <= 16) return "MAX";
+  if (abs <= 40) return "PERFECT";
+  if (abs <= 75) return "GREAT";
+  if (abs <= 110) return "GOOD";
+  return "MISS";
+}
+
+export interface HitErrorEvent {
+  /** Desvío en ms (negativo: early/temprano, positivo: late/tarde) */
+  errorMs: number;
+  /** Timestamp de performance.now() cuando ocurrió el impacto */
+  timestamp: number;
+}
+
 export interface PlayEngineState {
   combo: number;
   maxCombo: number;
@@ -18,11 +45,15 @@ export interface PlayEngineState {
   hitNoteIndices: Set<number>;
   /** Set con los índices de las LNs que están siendo sostenidas activamente */
   holdingLnIndices: Set<number>;
+  /** Historial reciente de desvíos de tiempo (Hit Errors) */
+  recentHitErrors: HitErrorEvent[];
+  /** Último juicio registrado para feedback visual flotante */
+  lastJudgement: JudgementEvent | null;
 }
 
 /**
  * Motor de juicio de ritmo en tiempo real para el Modo Play (Test Play).
- * Gestiona la detección precisa de notas simples y sostenidas (LN), combo y feedback de carriles.
+ * Gestiona la detección precisa de notas simples y sostenidas (LN), combo, feedback de carriles, timing error y juicios.
  */
 export class PlayEngine {
   private hitObjects: HitObject[] = [];
@@ -36,6 +67,8 @@ export class PlayEngine {
   private comboBreakTime: number = 0;
   private lastHitTime: number = 0;
   private hitNoteIndices: Set<number> = new Set();
+  private recentHitErrors: HitErrorEvent[] = [];
+  private lastJudgement: JudgementEvent | null = null;
 
   constructor(hitObjects: HitObject[] = [], keyCount: number = 7) {
     this.init(hitObjects, keyCount);
@@ -56,6 +89,8 @@ export class PlayEngine {
     this.lastBrokenCombo = 0;
     this.comboBreakTime = 0;
     this.lastHitTime = 0;
+    this.recentHitErrors = [];
+    this.lastJudgement = null;
   }
 
   /**
@@ -87,6 +122,18 @@ export class PlayEngine {
       const note = this.hitObjects[bestIndex];
       this.judgedMap.set(bestIndex, "hit");
 
+      // Calcular desvío de tiempo exacto (ms) y determinar el juicio
+      const errorMs = effectiveTime - note.timeMs;
+      const now = performance.now();
+      const tier = getJudgementTier(errorMs);
+
+      this.lastJudgement = { tier, timestamp: now };
+      this.recentHitErrors.push({ errorMs, timestamp: now });
+      // Mantener solo los últimos 20 impactos
+      if (this.recentHitErrors.length > 20) {
+        this.recentHitErrors.shift();
+      }
+
       if (note.endTimeMs !== null) {
         // Long Note: NO ocultar aún, dejarla visible mientras se sostiene
         this.holdingLnMap.set(laneIndex, bestIndex);
@@ -99,7 +146,7 @@ export class PlayEngine {
       if (this.combo > this.maxCombo) {
         this.maxCombo = this.combo;
       }
-      this.lastHitTime = performance.now();
+      this.lastHitTime = now;
       return true;
     }
 
@@ -145,10 +192,11 @@ export class PlayEngine {
       const note = this.hitObjects[i];
       if (this.judgedMap.has(i)) continue;
 
-      // Si la nota ya pasó la ventana de golpe sin haber sido tocada
+      // Si la nota ya pasó la ventana de golpe sin haber sido tocada:
+      // Se registra el MISS (se rompe combo), pero NO se oculta prematuramente,
+      // permitiendo que la nota continúe su trayectoria hasta salir del canvas.
       if (effectiveTime - note.timeMs > HIT_WINDOW_MS) {
         this.judgedMap.set(i, "miss");
-        this.hitNoteIndices.add(i); // Ocultar la nota del render
         this.triggerMiss();
       }
     }
@@ -158,16 +206,18 @@ export class PlayEngine {
       const note = this.hitObjects[noteIndex];
       if (note && note.endTimeMs !== null && effectiveTime > note.endTimeMs + HIT_WINDOW_MS) {
         this.holdingLnMap.delete(lane);
-        this.hitNoteIndices.add(noteIndex); // LN completada, ocultar
+        this.hitNoteIndices.add(noteIndex); // LN completada y soltada/terminada, ocultar
       }
     }
   }
 
   private triggerMiss(): void {
+    const now = performance.now();
+    this.lastJudgement = { tier: "MISS", timestamp: now };
     if (this.combo > 0) {
       this.lastBrokenCombo = this.combo;
       this.combo = 0;
-      this.comboBreakTime = performance.now();
+      this.comboBreakTime = now;
     }
   }
 
@@ -181,6 +231,8 @@ export class PlayEngine {
       activeHeldLanes: [...this.activeHeldLanes],
       hitNoteIndices: this.hitNoteIndices,
       holdingLnIndices: new Set(this.holdingLnMap.values()),
+      recentHitErrors: [...this.recentHitErrors],
+      lastJudgement: this.lastJudgement,
     };
   }
 }
