@@ -1,7 +1,22 @@
+mod skin;
+
 use serde::Serialize;
+use skin::{list_skins, load_mania_skin, SkinManiaConfig, SkinMetadata};
 use std::path::Path;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
+
+/// Lista todas las skins instaladas en osu! o en una ruta personalizada.
+#[tauri::command]
+fn list_osu_skins(custom_dir: Option<String>) -> Result<Vec<SkinMetadata>, String> {
+    Ok(list_skins(&custom_dir))
+}
+
+/// Carga la configuración de skin.ini para un modo de teclas específico (7K / 4K).
+#[tauri::command]
+fn load_osu_skin_config(skin_folder_path: String, key_count: u8) -> Result<SkinManiaConfig, String> {
+    Ok(load_mania_skin(&skin_folder_path, key_count))
+}
 
 /// Resultado de cargar un beatmap desde el disco, junto con la ruta de su audio e imagen de fondo.
 #[derive(Serialize)]
@@ -762,7 +777,9 @@ pub fn run() {
             save_beatmap,
             list_beatmap_difficulties,
             search_beatmaps,
-            invalidate_search_index
+            invalidate_search_index,
+            list_osu_skins,
+            load_osu_skin_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

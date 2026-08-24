@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Layers, Check, CornerDownLeft } from "lucide-react";
+import { Check, CornerDownLeft } from "lucide-react";
 import type { BeatmapDiffItem } from "../lib/native";
 
 interface QuickDiffSwitcherModalProps {

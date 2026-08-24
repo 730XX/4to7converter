@@ -28,11 +28,13 @@ import {
   isTauri,
   listBeatmapDifficulties,
   loadBeatmapWithAudio,
+  loadOsuSkinConfig,
   saveBeatmap,
   toAssetUrl,
   toAudioUrl,
   type BeatmapDiffItem,
 } from "./lib/native";
+import { loadAllSkinTextures, type LoadedSkinTextures } from "./preview/skin-manager";
 import {
   createDefaultLaneMapState,
   getTargetColumnCounts,
@@ -92,8 +94,41 @@ export default function App() {
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
   const [presets, setPresets] = useState<LanePreset[]>(() => loadPresets());
+  const [customSkinTextures, setCustomSkinTextures] = useState<LoadedSkinTextures | null>(null);
   const [osd, setOsd] = useState<OsdState | null>(null);
   const osdTimerRef = useRef<number | null>(null);
+
+  // Cargar texturas de la skin seleccionada (7K)
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadSkin(): Promise<void> {
+      if (!settings.selectedSkinPath) {
+        setCustomSkinTextures(null);
+        return;
+      }
+      try {
+        const config = await loadOsuSkinConfig(settings.selectedSkinPath, 7);
+        if (config && !isCancelled) {
+          const textures = await loadAllSkinTextures(config);
+          if (!isCancelled) {
+            setCustomSkinTextures(textures);
+          }
+        }
+      } catch (e) {
+        console.error("Error al cargar texturas de la skin:", e);
+        if (!isCancelled) {
+          setCustomSkinTextures(null);
+        }
+      }
+    }
+
+    void loadSkin();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [settings.selectedSkinPath]);
 
   function triggerOsd(state: OsdState): void {
     setOsd(state);
@@ -691,6 +726,7 @@ export default function App() {
               previewMode={settings.previewMode}
               hitGlow={settings.hitGlow}
               volume={settings.volume}
+              hitsoundVolume={settings.hitsoundVolume}
               isPlayMode={isPlayMode}
               keybinds={settings.keybinds7k}
               playOffsetMs={settings.playOffsetMs}
@@ -700,6 +736,8 @@ export default function App() {
               playShowHitError={settings.playShowHitError}
               playStageWidth={settings.playStageWidth}
               hitPositionOffset={settings.hitPositionOffset}
+              receptorOffset={settings.receptorOffset}
+              customSkinTextures={customSkinTextures}
               onExitPlayMode={() => setIsPlayMode(false)}
             />
           </section>

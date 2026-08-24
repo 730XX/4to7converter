@@ -118,17 +118,19 @@ export function PresetSelector({
                     const isSelected = activePreset?.id === preset.id;
                     return (
                       <li key={preset.id} className="preset-dropdown-item">
-                        <button
-                          type="button"
-                          className={`preset-item-btn${isSelected ? " is-selected" : ""}`}
-                          onClick={() => handleSelectPreset(preset)}
-                          role="option"
-                          aria-selected={isSelected}
-                        >
-                          <div className="preset-item-name-wrap">
-                            {isSelected && <Check size={14} className="preset-check-icon" />}
-                            <span className="preset-item-name">{preset.name}</span>
-                          </div>
+                        <div className={`preset-item-row${isSelected ? " is-selected" : ""}`}>
+                          <button
+                            type="button"
+                            className="preset-item-btn"
+                            onClick={() => handleSelectPreset(preset)}
+                            role="option"
+                            aria-selected={isSelected}
+                          >
+                            <div className="preset-item-name-wrap">
+                              {isSelected && <Check size={14} className="preset-check-icon" />}
+                              <span className="preset-item-name">{preset.name}</span>
+                            </div>
+                          </button>
                           <button
                             type="button"
                             className="preset-item-delete-btn"
@@ -138,7 +140,7 @@ export function PresetSelector({
                           >
                             <Trash2 size={13} />
                           </button>
-                        </button>
+                        </div>
                       </li>
                     );
                   })}

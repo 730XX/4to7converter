@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Volume2,
   Gauge,
@@ -9,12 +9,14 @@ import {
   Gamepad2,
   Keyboard,
   Clock,
-  Sparkles,
   X,
   Layers,
   HelpCircle,
+  Palette,
+  RefreshCw,
 } from "lucide-react";
 import { formatKeyCode, SETTINGS_LIMITS, type UserSettings } from "../lib/settings";
+import { listOsuSkins, type SkinMetadata } from "../lib/native";
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -37,6 +39,26 @@ export function SettingsDrawer({
   onOpenKeybinds,
 }: SettingsDrawerProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("play");
+  const [skins, setSkins] = useState<SkinMetadata[]>([]);
+  const [isLoadingSkins, setIsLoadingSkins] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      void refreshSkins();
+    }
+  }, [isOpen]);
+
+  async function refreshSkins(): Promise<void> {
+    setIsLoadingSkins(true);
+    try {
+      const list = await listOsuSkins();
+      setSkins(list);
+    } catch (e) {
+      console.error("Error al cargar lista de skins:", e);
+    } finally {
+      setIsLoadingSkins(false);
+    }
+  }
 
   const {
     volume,
@@ -55,6 +77,8 @@ export function SettingsDrawer({
     noteHeight = 16,
     playStageWidth = 500,
     hitPositionOffset = 40,
+    receptorOffset = 0,
+    selectedSkinPath = null,
   } = settings;
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
@@ -254,7 +278,7 @@ export function SettingsDrawer({
                     <div className="settings-item-label-group">
                       <span className="settings-item-label">Posición de Línea de Juicio (Hit Position)</span>
                       <span className="settings-item-hint">
-                        Altura de la línea de golpe desde el borde inferior
+                        Altura de la línea de golpe lógica desde el borde inferior
                       </span>
                     </div>
                     <span className="settings-item-value mono">{hitPositionOffset}px</span>
@@ -268,6 +292,39 @@ export function SettingsDrawer({
                     onChange={(e) => update("hitPositionOffset", Number(e.target.value))}
                     className="settings-slider"
                   />
+                </div>
+
+                <div className="settings-item">
+                  <div className="settings-item-info">
+                    <div className="settings-item-label-group">
+                      <span className="settings-item-label">Alineación de Receptores (Receptor Offset)</span>
+                      <span className="settings-item-hint">
+                        Desplaza verticalmente los sprites de los receptores de tu skin
+                      </span>
+                    </div>
+                    <span className="settings-item-value mono">{receptorOffset > 0 ? `+${receptorOffset}` : receptorOffset}px</span>
+                  </div>
+                  <div className="settings-slider-wrapper">
+                    <input
+                      type="range"
+                      min={SETTINGS_LIMITS.receptorOffset.min}
+                      max={SETTINGS_LIMITS.receptorOffset.max}
+                      step={SETTINGS_LIMITS.receptorOffset.step}
+                      value={receptorOffset}
+                      onChange={(e) => update("receptorOffset", Number(e.target.value))}
+                      className="settings-slider"
+                    />
+                    {receptorOffset !== 0 && (
+                      <button
+                        type="button"
+                        className="preset-action-btn"
+                        onClick={() => update("receptorOffset", 0)}
+                        title="Restablecer alineación a 0 px"
+                      >
+                        <Clock size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="settings-item settings-item--row">
@@ -474,6 +531,46 @@ export function SettingsDrawer({
                   >
                     <span className="toggle-thumb" />
                   </button>
+                </div>
+              </section>
+
+              <section className="settings-group">
+                <div className="settings-group-header">
+                  <Palette size={16} className="text-accent" />
+                  <h3>Skin de osu! (skin.ini)</h3>
+                </div>
+
+                <div className="settings-item">
+                  <div className="settings-item-info">
+                    <div className="settings-item-label-group">
+                      <span className="settings-item-label">Skin Activa</span>
+                      <span className="settings-item-hint">
+                        Renderiza notas, receptores y juicios oficiales de tu skin
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="preset-action-btn"
+                      onClick={() => void refreshSkins()}
+                      title="Recargar skins instaladas"
+                      disabled={isLoadingSkins}
+                    >
+                      <RefreshCw size={13} className={isLoadingSkins ? "animate-spin" : ""} />
+                    </button>
+                  </div>
+
+                  <select
+                    className="settings-select"
+                    value={selectedSkinPath ?? ""}
+                    onChange={(e) => update("selectedSkinPath", e.target.value || null)}
+                  >
+                    <option value="">Nativo / Predeterminado (Vectorial)</option>
+                    {skins.map((skin) => (
+                      <option key={skin.folder_path} value={skin.folder_path}>
+                        {skin.name} {skin.author ? `(por ${skin.author})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </section>
             </div>

@@ -51,9 +51,7 @@ function assertLaneMapCoversSourceColumns(beatmap: OsuBeatmap, laneMap: LaneMap)
   if (maxUsedColumn >= coveredSourceColumns) {
     throw new ConversionError(
       ConversionErrorCode.SourceKeyCountMismatch,
-      `El beatmap tiene notas en la columna ${maxUsedColumn} pero el lane map solo cubre las columnas 0..${
-        coveredSourceColumns - 1
-      }. Carga un mapa 4k o proporciona un lane map que lo cubra.`,
+      `Por el momento solo puedes cargar mapas 4k.`,
     );
   }
 }

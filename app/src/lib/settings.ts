@@ -12,6 +12,7 @@ export const SETTINGS_LIMITS = {
   noteHeight: { min: 10, max: 36, step: 1, default: 16, },
   playStageWidth: { min: 320, max: 800, step: 10, default: 500, },
   hitPositionOffset: { min: 20, max: 180, step: 5, default: 40, },
+  receptorOffset: { min: -120, max: 120, step: 2, default: 0, },
 } as const;
 
 /**
@@ -36,6 +37,8 @@ export interface UserSettings {
   playShowHitError: boolean; // Mostrar barra de precisión de timing / hit error en Modo Play
   playStageWidth: number; // Ancho máximo del contenedor en Modo Play (320 a 800, default: 500)
   hitPositionOffset: number; // Distancia de la línea de juicio desde el borde en px (20 a 180, default: 40)
+  receptorOffset: number; // Desplazamiento vertical de los sprites de receptores en px (-120 a 120, default: 0)
+  selectedSkinPath: string | null; // Ruta absoluta de la skin de osu! seleccionada (null = skin nativa)
 }
 
 export const DEFAULT_KEYBINDS_7K: string[] = [
@@ -67,6 +70,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   playShowHitError: true,
   playStageWidth: SETTINGS_LIMITS.playStageWidth.default,
   hitPositionOffset: SETTINGS_LIMITS.hitPositionOffset.default,
+  receptorOffset: SETTINGS_LIMITS.receptorOffset.default,
+  selectedSkinPath: null,
 };
 
 /**

@@ -8,6 +8,7 @@ import {
 } from "../preview/renderer";
 import { PlayEngine } from "../preview/play-engine";
 import { DEFAULT_KEYBINDS_7K } from "../lib/settings";
+import type { LoadedSkinTextures } from "../preview/skin-manager";
 
 interface PlayfieldProps {
   beatmap?: OsuBeatmap | null;
@@ -20,6 +21,7 @@ interface PlayfieldProps {
   previewMode?: "7k" | "4k" | "split";
   hitGlow?: boolean;
   volume?: number;
+  hitsoundVolume?: number;
   isPlayMode?: boolean;
   keybinds?: string[];
   playOffsetMs?: number;
@@ -29,6 +31,8 @@ interface PlayfieldProps {
   playShowHitError?: boolean;
   playStageWidth?: number;
   hitPositionOffset?: number;
+  receptorOffset?: number;
+  customSkinTextures?: LoadedSkinTextures | null;
   onExitPlayMode?: () => void;
 }
 
@@ -47,6 +51,7 @@ export function Playfield({
   previewMode = "7k",
   hitGlow = true,
   volume = 80,
+  hitsoundVolume = 20,
   isPlayMode = false,
   keybinds = DEFAULT_KEYBINDS_7K,
   playOffsetMs = 0,
@@ -56,11 +61,20 @@ export function Playfield({
   playShowHitError = true,
   playStageWidth = 500,
   hitPositionOffset = 40,
+  receptorOffset = 0,
+  customSkinTextures = null,
   onExitPlayMode,
 }: PlayfieldProps) {
-  const [debugHitWindows, setDebugHitWindows] = useState(false);
+  const debugHitWindows = false;
+  const [isAutoplay, setIsAutoplay] = useState(false);
   const isSplit = previewMode === "split" && sourceBeatmap && targetBeatmap;
   const activeBeatmap = beatmap ?? (previewMode === "4k" ? sourceBeatmap : targetBeatmap);
+
+  useEffect(() => {
+    if (!isPlayMode) {
+      setIsAutoplay(false);
+    }
+  }, [isPlayMode]);
 
   if (isSplit) {
     return (
@@ -75,7 +89,10 @@ export function Playfield({
                 scrollDirection={scrollDirection}
                 hitGlow={hitGlow}
                 volume={volume}
+                hitsoundVolume={hitsoundVolume}
                 isPlayMode={false}
+                receptorOffset={receptorOffset}
+                customSkinTextures={customSkinTextures}
               />
             </div>
             <div className="preview-split-divider" aria-hidden="true" />
@@ -87,13 +104,15 @@ export function Playfield({
                 scrollDirection={scrollDirection}
                 hitGlow={hitGlow}
                 volume={volume}
+                hitsoundVolume={hitsoundVolume}
                 isPlayMode={false}
+                receptorOffset={receptorOffset}
+                customSkinTextures={customSkinTextures}
               />
             </div>
           </div>
         </section>
 
-        {/* Si se activa Modo Play durante Split, proyectar el 7K al frente a pantalla completa */}
         {isPlayMode && (
           <div className="play-stage-overlay">
             <div className="play-stage-container" style={{ maxWidth: `${playStageWidth}px` }}>
@@ -105,7 +124,10 @@ export function Playfield({
                   scrollDirection={scrollDirection}
                   hitGlow={hitGlow}
                   volume={volume}
+                  hitsoundVolume={hitsoundVolume}
                   isPlayMode={true}
+                  isAutoplay={isAutoplay}
+                  onToggleAutoplay={() => setIsAutoplay((prev) => !prev)}
                   keybinds={keybinds}
                   playOffsetMs={playOffsetMs}
                   comboPositionPercent={comboPositionPercent}
@@ -114,6 +136,8 @@ export function Playfield({
                   noteHeight={noteHeight}
                   showHitError={playShowHitError}
                   hitPositionOffset={hitPositionOffset}
+                  receptorOffset={receptorOffset}
+                  customSkinTextures={customSkinTextures}
                   onExitPlayMode={onExitPlayMode}
                 />
               </div>
@@ -139,12 +163,14 @@ export function Playfield({
             scrollDirection={scrollDirection}
             hitGlow={hitGlow}
             volume={volume}
+            hitsoundVolume={hitsoundVolume}
             isPlayMode={false}
+            receptorOffset={receptorOffset}
+            customSkinTextures={customSkinTextures}
           />
         </div>
       </section>
 
-      {/* OVERLAY DEL MODO PLAY: Se coloca por encima de toda la app ocupando todo el alto */}
       {isPlayMode && (
         <div className="play-stage-overlay">
           <div className="play-stage-container" style={{ maxWidth: `${playStageWidth}px` }}>
@@ -156,7 +182,10 @@ export function Playfield({
                 scrollDirection={scrollDirection}
                 hitGlow={hitGlow}
                 volume={volume}
+                hitsoundVolume={hitsoundVolume}
                 isPlayMode={true}
+                isAutoplay={isAutoplay}
+                onToggleAutoplay={() => setIsAutoplay((prev) => !prev)}
                 keybinds={keybinds}
                 playOffsetMs={playOffsetMs}
                 comboPositionPercent={comboPositionPercent}
@@ -165,6 +194,8 @@ export function Playfield({
                 noteHeight={noteHeight}
                 showHitError={playShowHitError}
                 hitPositionOffset={hitPositionOffset}
+                receptorOffset={receptorOffset}
+                customSkinTextures={customSkinTextures}
                 onExitPlayMode={onExitPlayMode}
               />
             </div>
@@ -182,7 +213,10 @@ interface SinglePlayfieldCanvasProps {
   scrollDirection: "down" | "up";
   hitGlow: boolean;
   volume: number;
+  hitsoundVolume?: number;
   isPlayMode?: boolean;
+  isAutoplay?: boolean;
+  onToggleAutoplay?: () => void;
   keybinds?: string[];
   playOffsetMs?: number;
   comboPositionPercent?: number;
@@ -191,6 +225,8 @@ interface SinglePlayfieldCanvasProps {
   noteHeight?: number;
   showHitError?: boolean;
   hitPositionOffset?: number;
+  receptorOffset?: number;
+  customSkinTextures?: LoadedSkinTextures | null;
   onExitPlayMode?: () => void;
 }
 
@@ -201,7 +237,10 @@ function SinglePlayfieldCanvas({
   scrollDirection,
   hitGlow,
   volume,
+  hitsoundVolume = 20,
   isPlayMode = false,
+  isAutoplay = false,
+  onToggleAutoplay,
   keybinds = DEFAULT_KEYBINDS_7K,
   playOffsetMs = 0,
   comboPositionPercent = 55,
@@ -210,6 +249,8 @@ function SinglePlayfieldCanvas({
   noteHeight = 16,
   showHitError = true,
   hitPositionOffset = 40,
+  receptorOffset = 0,
+  customSkinTextures = null,
   onExitPlayMode,
 }: SinglePlayfieldCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -220,7 +261,10 @@ function SinglePlayfieldCanvas({
   const scrollDirectionRef = useRef(scrollDirection);
   const hitGlowRef = useRef(hitGlow);
   const volumeRef = useRef(volume);
+  const hitsoundVolumeRef = useRef(hitsoundVolume);
   const isPlayModeRef = useRef(isPlayMode);
+  const isAutoplayRef = useRef(isAutoplay);
+  const onToggleAutoplayRef = useRef(onToggleAutoplay);
   const keybindsRef = useRef(keybinds);
   const playOffsetMsRef = useRef(playOffsetMs);
   const comboPositionPercentRef = useRef(comboPositionPercent);
@@ -229,10 +273,11 @@ function SinglePlayfieldCanvas({
   const noteHeightRef = useRef(noteHeight);
   const showHitErrorRef = useRef(showHitError);
   const hitPositionOffsetRef = useRef(hitPositionOffset);
+  const receptorOffsetRef = useRef(receptorOffset);
+  const customSkinTexturesRef = useRef(customSkinTextures);
   const onExitPlayModeRef = useRef(onExitPlayMode);
   const rafIdRef = useRef<number | null>(null);
 
-  // Instancia persistente del motor de juego para Modo Play
   const playEngineRef = useRef<PlayEngine>(new PlayEngine(beatmap.hitObjects, beatmap.keyCount));
 
   beatmapRef.current = beatmap;
@@ -240,7 +285,10 @@ function SinglePlayfieldCanvas({
   scrollDirectionRef.current = scrollDirection;
   hitGlowRef.current = hitGlow;
   volumeRef.current = volume;
+  hitsoundVolumeRef.current = hitsoundVolume;
   isPlayModeRef.current = isPlayMode;
+  isAutoplayRef.current = isAutoplay;
+  onToggleAutoplayRef.current = onToggleAutoplay;
   keybindsRef.current = keybinds;
   playOffsetMsRef.current = playOffsetMs;
   comboPositionPercentRef.current = comboPositionPercent;
@@ -249,9 +297,10 @@ function SinglePlayfieldCanvas({
   noteHeightRef.current = noteHeight;
   showHitErrorRef.current = showHitError;
   hitPositionOffsetRef.current = hitPositionOffset;
+  receptorOffsetRef.current = receptorOffset;
+  customSkinTexturesRef.current = customSkinTextures;
   onExitPlayModeRef.current = onExitPlayMode;
 
-  // Reinicializar engine cuando cambie el mapa o se entre al Modo Play
   useEffect(() => {
     playEngineRef.current.init(beatmap.hitObjects, beatmap.keyCount);
   }, [beatmap, isPlayMode]);
@@ -259,24 +308,30 @@ function SinglePlayfieldCanvas({
   const palette = useMemo(() => buildPlayfieldPalette(beatmap.keyCount), [beatmap.keyCount]);
   paletteRef.current = palette;
 
-  // Listeners de teclado para Modo Play (captura de keybinds de los 7 carriles y Escape)
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
       if (!isPlayModeRef.current) return;
 
-      // Escape para salir de inmediato del Modo Play
       if (event.code === "Escape") {
         event.preventDefault();
         onExitPlayModeRef.current?.();
         return;
       }
 
-      // CRUCIAL: Ignorar auto-repeat del sistema operativo para evitar spamming automático de combo
+      if (event.code === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        onToggleAutoplayRef.current?.();
+        return;
+      }
+
+      if (isAutoplayRef.current) {
+        return;
+      }
+
       if (event.repeat) {
         return;
       }
 
-      // Si el usuario está escribiendo en un input, ignorar
       const target = event.target as HTMLElement | null;
       if (target) {
         const isTextInput =
@@ -295,12 +350,15 @@ function SinglePlayfieldCanvas({
         event.preventDefault();
         const rawTime = playback.currentTimeMsRef.current;
         const effectiveTime = rawTime - playOffsetMsRef.current;
-        playEngineRef.current.handleKeyDown(laneIndex, effectiveTime, 0);
+        const wasHit = playEngineRef.current.handleKeyDown(laneIndex, effectiveTime, 0);
+        if (wasHit) {
+          playback.playHitSound();
+        }
       }
     }
 
     function handleKeyUp(event: KeyboardEvent): void {
-      if (!isPlayModeRef.current) return;
+      if (!isPlayModeRef.current || isAutoplayRef.current) return;
 
       const laneIndex = keybindsRef.current.indexOf(event.code);
       if (laneIndex !== -1) {
@@ -377,17 +435,25 @@ function SinglePlayfieldCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const rawTimeMs = playback.currentTimeMsRef.current;
-    // En Modo Play, el offset desplaza el tiempo del canvas para alinear visualmente las notas y el juicio
+    // En Autoplay se usa siempre el offset 0 (por defecto) para timing matemático puro.
+    // Al desactivar Autoplay, vuelve inmediatamente al offset personalizado del usuario.
+    const activeOffset = isAutoplayRef.current ? 0 : playOffsetMsRef.current;
     const effectiveTimeMs = isPlayModeRef.current
-      ? rawTimeMs - playOffsetMsRef.current
+      ? rawTimeMs - activeOffset
       : rawTimeMs;
 
-    // 17500 / scrollSpeed (25 = 700ms)
     const approachMs = Math.round(17500 / Math.max(scrollSpeedRef.current, 5));
 
-    // Actualizar juicio de notas en Modo Play con el tiempo efectivo
     if (isPlayModeRef.current && playback.isPlaying) {
-      playEngineRef.current.update(effectiveTimeMs, 0);
+      if (isAutoplayRef.current) {
+        playEngineRef.current.updateAutoplay(
+          effectiveTimeMs,
+          playback.playHitSound,
+          hitsoundVolumeRef.current,
+        );
+      } else {
+        playEngineRef.current.update(effectiveTimeMs, 0);
+      }
     }
 
     const playState = playEngineRef.current.getState();
@@ -420,6 +486,8 @@ function SinglePlayfieldCanvas({
         showHitError: showHitErrorRef.current,
         lastJudgement: isPlayModeRef.current ? playState.lastJudgement : null,
         hitPositionOffset: isPlayModeRef.current ? hitPositionOffsetRef.current : 40,
+        receptorOffset: receptorOffsetRef.current,
+        customSkinTextures: customSkinTexturesRef.current,
         isCompleted:
           isPlayModeRef.current &&
           playback.durationMs > 0 &&

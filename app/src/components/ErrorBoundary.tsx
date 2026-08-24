@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <main className="app-shell">
         <section className="error-card">
-          <h1 className="error-card-title">Algo salió mal</h1>
+          <h1 className="error-card-title">Algo paso papuh :,v</h1>
           <p className="error-card-message mono">{this.state.error.message}</p>
           <button type="button" className="ghost-button" onClick={this.handleReset}>
             Reiniciar la aplicación

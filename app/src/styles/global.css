@@ -2313,12 +2313,25 @@ button {
   gap: 2px;
 }
 
-.preset-dropdown-item {
-  position: relative;
+.preset-item-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+  transition: all 0.12s ease;
+  padding-right: 4px;
+}
+
+.preset-item-row:hover {
+  background: rgba(91, 140, 255, 0.12);
+}
+
+.preset-item-row.is-selected {
+  background: rgba(91, 140, 255, 0.18);
 }
 
 .preset-item-btn {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2331,16 +2344,15 @@ button {
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
+  min-width: 0;
   transition: all 0.12s ease;
 }
 
 .preset-item-btn:hover {
-  background: rgba(91, 140, 255, 0.12);
   color: #ffffff;
 }
 
-.preset-item-btn.is-selected {
-  background: rgba(91, 140, 255, 0.18);
+.preset-item-row.is-selected .preset-item-btn {
   color: var(--color-accent-strong);
   font-weight: 600;
 }

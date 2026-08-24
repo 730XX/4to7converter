@@ -3,7 +3,6 @@ import {
   getColumnCenterX,
   getHoldEndY,
   getNoteY,
-  getVisibleHitObjects,
   isNoteVisible,
   type PlayfieldMetrics,
 } from "./preview-math";
@@ -18,9 +17,6 @@ export const PLAYFIELD_HIT_LINE_OFFSET = 40;
 
 /** Tiempo de aproximación: de la aparición de una nota a la línea de golpe. */
 export const PLAYFIELD_APPROACH_MS = 1000;
-
-/** Altura de una nota normal dibujada en píxeles. */
-const NOTE_HEIGHT = 16;
 
 /**
  * Configuración visual centralizada para opacidades y efectos del renderizador.
@@ -146,6 +142,8 @@ export function buildPlayfieldPalette(keyCount: number): PlayfieldPalette {
   };
 }
 
+import type { LoadedSkinTextures } from "./skin-manager";
+
 export interface PlayfieldFrameOptions {
   approachMs?: number;
   scrollDirection?: "down" | "up";
@@ -167,6 +165,8 @@ export interface PlayfieldFrameOptions {
   isCompleted?: boolean;
   lastJudgement?: JudgementEvent | null;
   hitPositionOffset?: number;
+  receptorOffset?: number;
+  customSkinTextures?: LoadedSkinTextures | null;
 }
 
 /**
@@ -204,6 +204,8 @@ export function drawPlayfieldFrame(
   let isCompleted = false;
   let lastJudgement: JudgementEvent | null = null;
   let hitPositionOffset = PLAYFIELD_HIT_LINE_OFFSET;
+  let receptorOffset = 0;
+  let customSkinTextures: LoadedSkinTextures | null = null;
 
   if (typeof options === "object") {
     approachMs = options.approachMs ?? PLAYFIELD_APPROACH_MS;
@@ -224,6 +226,8 @@ export function drawPlayfieldFrame(
     isCompleted = options.isCompleted ?? false;
     lastJudgement = options.lastJudgement ?? null;
     hitPositionOffset = options.hitPositionOffset ?? PLAYFIELD_HIT_LINE_OFFSET;
+    receptorOffset = options.receptorOffset ?? 0;
+    customSkinTextures = options.customSkinTextures ?? null;
   } else if (typeof options === "number") {
     approachMs = options;
   }
@@ -249,7 +253,6 @@ export function drawPlayfieldFrame(
     drawLanes(ctx, width, height, keyCount, palette);
   }
 
-  // Dibujar zonas de debug de ventana de golpe si está activo
   if (debugHitWindows) {
     drawDebugHitWindows(
       ctx,
@@ -262,7 +265,7 @@ export function drawPlayfieldFrame(
     );
   }
 
-  drawHitLine(
+  drawHitBeams(
     ctx,
     width,
     height,
@@ -279,17 +282,28 @@ export function drawPlayfieldFrame(
     ctx,
     hitObjects,
     currentTimeMs,
+    keyCount,
     metrics,
+    palette,
+    dir,
+    isPlayMode,
+    hitNoteIndices,
+    holdingLnIndices,
+    noteHeight,
+    customSkinTextures,
+  );
+  drawHitLine(
+    ctx,
+    width,
+    metrics.hitLineY,
     keyCount,
     palette,
     dir,
-    hitNoteIndices,
-    holdingLnIndices,
-    isPlayMode,
-    noteHeight,
+    userActiveLanes,
+    customSkinTextures,
+    receptorOffset,
   );
 
-  // Si está en Modo Play, dibujar el HUD de Combo, Juicio y la Barra de Hit Error a la altura configurada
   if (isPlayMode) {
     drawComboHud(
       ctx,
@@ -303,7 +317,7 @@ export function drawPlayfieldFrame(
     );
 
     if (lastJudgement) {
-      drawJudgement(ctx, width, height, lastJudgement, comboPositionPercent);
+      drawJudgement(ctx, width, height, lastJudgement, comboPositionPercent, customSkinTextures);
     }
 
     if (showHitError && recentHitErrors && recentHitErrors.length > 0) {
@@ -342,23 +356,25 @@ function drawLanes(
   palette: PlayfieldPalette,
 ): void {
   const columnWidth = width / keyCount;
+  ctx.save();
   ctx.strokeStyle = palette.separatorColor;
   ctx.lineWidth = 1;
 
-  for (let column = 0; column <= keyCount; column += 1) {
+  for (let column = 1; column < keyCount; column += 1) {
     const x = Math.round(column * columnWidth) + 0.5;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
   }
+  ctx.restore();
 }
 
-/** Pinta la línea de golpe y el degradado vertical suave coloreado por carril al golpear notas o pulsar teclas. */
-function drawHitLine(
+/** Pinta los haces de luz reactivos de fondo cuando se tocan notas o pulsan teclas. */
+function drawHitBeams(
   ctx: CanvasRenderingContext2D,
   width: number,
-  _height: number,
+  height: number,
   hitLineY: number,
   keyCount: number,
   hitObjects: HitObject[],
@@ -368,10 +384,15 @@ function drawHitLine(
   scrollDirection: "down" | "up" = "down",
   userActiveLanes: boolean[] | null = null,
 ): void {
-  const columnWidth = width / keyCount;
-  const BEAM_HEIGHT = 90;
+  // Si el usuario desactivó el resplandor / glow en ajustes, no dibujar haces de luz
+  if (!hitGlow) {
+    return;
+  }
 
-  // 1. Si estamos en Modo Play y el usuario está pulsando teclas, dibujar los rayos de pulsación activa
+  const columnWidth = width / keyCount;
+  const BEAM_HEIGHT = Math.min(180, height * 0.15);
+
+  // Iluminación reactiva (Beams)
   if (userActiveLanes && userActiveLanes.length > 0) {
     for (let col = 0; col < keyCount; col++) {
       if (userActiveLanes[col]) {
@@ -396,10 +417,9 @@ function drawHitLine(
         );
       }
     }
-  } else if (hitGlow) {
-    // 2. Modo Preview clásico (Autoplay): evaluamos notas próximas a la línea de golpe
-    const ATTACK_MS = 50; // Entrada suave (fade-in)
-    const DECAY_MS = 250; // Salida progresiva suave (fade-out)
+  } else {
+    const ATTACK_MS = 50; 
+    const DECAY_MS = 250; 
 
     for (const ho of hitObjects) {
       const isHoldActive =
@@ -445,15 +465,48 @@ function drawHitLine(
         }
       }
     }
-
-    // Glow base verde sutil de la línea
-    ctx.fillStyle = "rgba(163, 255, 56, 0.25)";
-    ctx.fillRect(0, hitLineY - 4, width, 9);
   }
+}
 
-  // Línea principal
-  ctx.fillStyle = palette.hitLineColor;
-  ctx.fillRect(0, hitLineY - 1, width, 3);
+/** Pinta la línea de golpe o los receptores de la skin (siempre por encima de las notas que caen). */
+function drawHitLine(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  hitLineY: number,
+  keyCount: number,
+  palette: PlayfieldPalette,
+  scrollDirection: "down" | "up" = "down",
+  userActiveLanes: boolean[] | null = null,
+  customSkinTextures: LoadedSkinTextures | null = null,
+  receptorOffset: number = 0,
+): void {
+  const columnWidth = width / keyCount;
+
+  // 1. Si la skin provee imágenes de receptores
+  if (customSkinTextures && customSkinTextures.keyImages.length >= keyCount) {
+    for (let col = 0; col < keyCount; col++) {
+      const isPressed = userActiveLanes ? !!userActiveLanes[col] : false;
+      const keyImg = isPressed
+        ? customSkinTextures.keyImagesD[col] ?? customSkinTextures.keyImages[col]
+        : customSkinTextures.keyImages[col];
+
+      const colX = Math.round(col * columnWidth);
+      const actualWidth = Math.round((col + 1) * columnWidth) - colX;
+
+      if (keyImg && keyImg.complete && keyImg.naturalWidth > 0) {
+        const aspect = keyImg.naturalHeight / keyImg.naturalWidth;
+        const imgH = actualWidth * aspect;
+        // receptorOffset desplaza el sprite hacia arriba o abajo independientemente del juicio
+        const baseImgY = scrollDirection === "down" ? hitLineY - imgH : hitLineY;
+        const imgY = baseImgY - receptorOffset;
+        ctx.drawImage(keyImg, colX, imgY, actualWidth, imgH);
+      }
+    }
+  } else {
+    // Línea verde tradicional
+    ctx.fillStyle = palette.hitLineColor;
+    ctx.fillRect(0, hitLineY - 1, width, 3);
+  }
 }
 
 /** Convierte color hex (#ffffff, #ffd700, etc.) a formato rgba string con opacidad. */
@@ -475,14 +528,15 @@ function drawNotes(
   ctx: CanvasRenderingContext2D,
   hitObjects: HitObject[],
   currentTimeMs: number,
-  metrics: PlayfieldMetrics,
   keyCount: number,
+  metrics: PlayfieldMetrics,
   palette: PlayfieldPalette,
   scrollDirection: "down" | "up" = "down",
+  isPlayMode: boolean = false,
   hitNoteIndices: Set<number> | null = null,
   holdingLnIndices: Set<number> | null = null,
-  isPlayMode: boolean = false,
   noteHeight: number = 16,
+  customSkinTextures: LoadedSkinTextures | null = null,
 ): void {
   const speedPxPerMs =
     scrollDirection === "down"
@@ -490,16 +544,17 @@ function drawNotes(
       : (metrics.height - metrics.topPadding - metrics.hitLineY) / metrics.approachMs;
 
   const columnWidth = metrics.width / keyCount;
-  // Margen de 1px a cada lado para respetar las líneas divisoras
   const noteWidth = Math.max(columnWidth - 2, 2);
 
-  const topBound = -60;
-  const bottomBound = metrics.height + 60;
+  const topBound = 0;
+  const bottomBound = metrics.height;
 
   for (let i = 0; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
+    if (!hitObject) {
+      continue;
+    }
 
-    // En modo play, si la nota ya fue juzgada y oculta, no dibujarla
     if (isPlayMode && hitNoteIndices && hitNoteIndices.has(i)) {
       continue;
     }
@@ -513,7 +568,6 @@ function drawNotes(
       scrollDirection,
     );
 
-    // Calcular posición final de la LN si aplica
     const endY =
       hitObject.endTimeMs === null
         ? null
@@ -525,7 +579,6 @@ function drawNotes(
             scrollDirection,
           );
 
-    // Descarte rápido de notas fuera de pantalla (culling)
     if (!isNoteVisible(noteY, endY, topBound, bottomBound)) {
       continue;
     }
@@ -533,39 +586,189 @@ function drawNotes(
     const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);
     const skin = palette.laneSkins[columnIndex] ?? WHITE_SKIN;
 
+    const customNoteImg = customSkinTextures?.noteImages[columnIndex] ?? null;
+    const customNoteHImg = customSkinTextures?.noteImagesH[columnIndex] ?? customNoteImg;
+    const customNoteLImg = customSkinTextures?.noteImagesL[columnIndex] ?? null;
+    const customNoteTImg = customSkinTextures?.noteImagesT[columnIndex] ?? null;
+
     if (hitObject.endTimeMs === null) {
-      // Nota normal (Rice note)
       const isPassed =
         scrollDirection === "down" ? noteY > metrics.hitLineY : noteY < metrics.hitLineY;
       ctx.globalAlpha = isPassed
         ? RENDER_CONFIG.notes.rice.passedAlpha
         : RENDER_CONFIG.notes.rice.fallingAlpha;
-      drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight, scrollDirection);
+
+      if (customNoteImg && customNoteImg.complete && customNoteImg.naturalWidth > 0) {
+        drawCustomNoteImage(ctx, customNoteImg, centerX, noteY, noteWidth, noteHeight, scrollDirection);
+      } else {
+        drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight, scrollDirection);
+      }
     } else {
-      // Hold Note (LN)
-      // En Modo Play: si el usuario la está sosteniendo activamente, forzar estado "holding"
       const isUserHolding = isPlayMode && holdingLnIndices != null && holdingLnIndices.has(i);
       const isFalling = currentTimeMs < hitObject.timeMs;
       const isHolding = isUserHolding ||
         (currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs);
 
-      if (isHolding) {
-        // Presionada: Color y brillo configurables, head fija en la hit line
-        ctx.globalAlpha = RENDER_CONFIG.notes.ln.holdingAlpha;
-        const effectiveHeadY = metrics.hitLineY;
-        drawHoldNoteBar(ctx, centerX, effectiveHeadY, endY!, noteWidth, skin, true, noteHeight, scrollDirection);
-      } else if (isFalling) {
-        // Cayendo: Opacidad configurable
-        ctx.globalAlpha = RENDER_CONFIG.notes.ln.fallingAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight, scrollDirection);
-      } else {
-        // Ya completada / Pasada
-        ctx.globalAlpha = RENDER_CONFIG.notes.ln.passedAlpha;
-        drawHoldNoteBar(ctx, centerX, noteY, endY!, noteWidth, skin, false, noteHeight, scrollDirection);
-      }
+      ctx.globalAlpha = isHolding
+        ? RENDER_CONFIG.notes.ln.holdingAlpha
+        : isFalling
+          ? RENDER_CONFIG.notes.ln.fallingAlpha
+          : RENDER_CONFIG.notes.ln.passedAlpha;
+
+      const effectiveHeadY = isHolding ? metrics.hitLineY : noteY;
+      drawHoldNoteWithSkin(
+        ctx,
+        centerX,
+        effectiveHeadY,
+        endY!,
+        noteWidth,
+        skin,
+        isHolding,
+        noteHeight,
+        scrollDirection,
+        customNoteHImg,
+        customNoteLImg,
+        customNoteTImg,
+      );
     }
   }
   ctx.globalAlpha = 1;
+}
+
+function drawCustomNoteImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  centerX: number,
+  y: number,
+  width: number,
+  noteHeight: number,
+  scrollDirection: "down" | "up",
+): void {
+  const x = Math.round(centerX - width / 2);
+  const aspect = img.naturalHeight / img.naturalWidth;
+  const calculatedHeight = Math.max(noteHeight, Math.round(width * aspect));
+  const topY = scrollDirection === "down" ? Math.round(y - calculatedHeight) : Math.round(y);
+  ctx.drawImage(img, x, topY, width, calculatedHeight);
+}
+
+function drawHoldNoteWithSkin(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  headY: number,
+  tailY: number,
+  noteWidth: number,
+  skin: LaneSkinColor,
+  isHolding: boolean,
+  noteHeight: number,
+  scrollDirection: "down" | "up",
+  headImg: HTMLImageElement | null,
+  bodyImg: HTMLImageElement | null,
+  tailImg: HTMLImageElement | null,
+): void {
+  const isCustomHead = headImg && headImg.complete && headImg.naturalWidth > 0;
+  const headAspect = isCustomHead ? headImg.naturalHeight / headImg.naturalWidth : 0;
+  const headCalculatedHeight = isCustomHead
+    ? Math.max(noteHeight, Math.round(noteWidth * headAspect))
+    : noteHeight;
+
+  // En osu! mania, el cuerpo de la LN se extiende desde la cola hasta el centro geométrico de la cabeza.
+  // La cabeza se renderiza por encima tapando el cuerpo.
+  const headCenterY = isCustomHead
+    ? (scrollDirection === "down" ? headY - headCalculatedHeight / 2 : headY + headCalculatedHeight / 2)
+    : headY;
+
+  const headBodyEdgeY = headCenterY;
+
+  const isCustomTail = tailImg && tailImg.complete && tailImg.naturalWidth > 0;
+  const tailAspect = isCustomTail ? tailImg.naturalHeight / tailImg.naturalWidth : 0;
+  const tailCalculatedHeight = isCustomTail
+    ? Math.max(noteHeight, Math.round(noteWidth * tailAspect))
+    : 2;
+  const tailBodyEdgeY = isCustomTail
+    ? (scrollDirection === "down" ? tailY : tailY)
+    : tailY;
+
+  // El cuerpo conecta limpiamente entre la cola y la cabeza
+  const bodyTop = Math.min(headBodyEdgeY, tailBodyEdgeY);
+  const bodyBottom = Math.max(headBodyEdgeY, tailBodyEdgeY);
+  const bodyHeight = Math.max(bodyBottom - bodyTop, 0);
+  const x = Math.round(centerX - noteWidth / 2);
+
+  // 1. DIBUJAR CUERPO (Emulación del renderizado de texturas de osu! mania / Percy LN)
+  if (bodyHeight > 0) {
+    if (bodyImg && bodyImg.complete && bodyImg.naturalWidth > 0) {
+      // En osu! mania, si el sprite es más alto que la LN física (ej. Percy LN de 16384px):
+      // osu! no estira toda la textura en el espacio pequeño, sino que corta/muestra solo la porción
+      // superior o mapea la textura en UV continuo a escala 1:1.
+      const srcWidth = bodyImg.naturalWidth;
+      const srcHeight = bodyImg.naturalHeight;
+      const scale = noteWidth / srcWidth;
+      const targetSourceHeight = Math.min(srcHeight, bodyHeight / scale);
+
+      if (scrollDirection === "down") {
+        // En downscroll: la parte visible superior de la textura (el remate/borde redondo de Percy)
+        // se sitúa en la cola de la LN (arriba)
+        ctx.drawImage(
+          bodyImg,
+          0,
+          0,
+          srcWidth,
+          targetSourceHeight,
+          x,
+          bodyTop,
+          noteWidth,
+          bodyHeight,
+        );
+      } else {
+        // En upscroll: se toma desde la base
+        const srcY = Math.max(0, srcHeight - targetSourceHeight);
+        ctx.drawImage(
+          bodyImg,
+          0,
+          srcY,
+          srcWidth,
+          targetSourceHeight,
+          x,
+          bodyTop,
+          noteWidth,
+          bodyHeight,
+        );
+      }
+    } else {
+      ctx.fillStyle = isHolding
+        ? hexToRgba(skin.mid, RENDER_CONFIG.notes.ln.holdingBodyOpacity)
+        : skin.holdBody;
+      ctx.fillRect(x + 2, bodyTop, noteWidth - 4, bodyHeight);
+
+      ctx.fillStyle = isHolding
+        ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingBorderOpacity)
+        : skin.border;
+      ctx.fillRect(x + 1, bodyTop, 2, bodyHeight);
+      ctx.fillRect(x + noteWidth - 3, bodyTop, 2, bodyHeight);
+    }
+  }
+
+  // 2. DIBUJAR COLA (TAIL)
+  if (isCustomTail) {
+    const tailYPos = scrollDirection === "down" ? tailY - tailCalculatedHeight : tailY;
+    ctx.drawImage(tailImg, x, tailYPos, noteWidth, tailCalculatedHeight);
+  } else {
+    ctx.fillStyle = isHolding
+      ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingTailOpacity)
+      : skin.border;
+    ctx.fillRect(x + 1, tailY - 1, noteWidth - 2, 2);
+  }
+
+  // 3. DIBUJAR CABEZA (HEAD)
+  // Guardamos el contexto para dibujar la cabeza siempre opaca y nítida
+  ctx.save();
+  ctx.globalAlpha = 1.0;
+  if (isCustomHead) {
+    drawCustomNoteImage(ctx, headImg, centerX, headY, noteWidth, noteHeight, scrollDirection);
+  } else {
+    drawNoteBar(ctx, centerX, headY, noteWidth, skin, noteHeight, scrollDirection);
+  }
+  ctx.restore();
 }
 
 /**
@@ -582,7 +785,6 @@ function drawComboHud(
   comboPositionPercent: number = 55,
 ): void {
   const centerX = width / 2;
-  // Altura configurable (por defecto 55% del alto, bien visible en zona de lectura)
   const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100);
   const now = performance.now();
 
@@ -591,39 +793,30 @@ function drawComboHud(
   ctx.textBaseline = "middle";
 
   if (combo > 0) {
-    // 1. Combo Activo con micro-escala elástica tras conectar nota
     const timeSinceHit = now - lastHitTime;
     let scale = 1.0;
     if (timeSinceHit < 140) {
       const p = timeSinceHit / 140;
-      scale = 1.0 + (1 - p) * 0.18; // 1.18 -> 1.0
+      scale = 1.0 + (1 - p) * 0.18;
     }
 
     ctx.translate(centerX, baseY);
     ctx.scale(scale, scale);
-
-    // Sombra de resplandor sutil estilo mania
     ctx.shadowColor = "rgba(255, 255, 255, 0.4)";
     ctx.shadowBlur = 12;
-
-    // Número del Combo centrado
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 36px 'Inter', system-ui, -apple-system, sans-serif";
     ctx.fillText(String(combo), 0, 0);
   } else if (lastBrokenCombo > 0 && now - comboBreakTime < 600) {
-    // 2. Animación de Combo Roto (decremento y desvanecimiento suave a 0)
     const elapsed = now - comboBreakTime;
-    const progress = elapsed / 600; // 0.0 -> 1.0
-    const alpha = (1 - progress) * (1 - progress); // fade out cuadrático
-    const offsetY = progress * 12; // sutil caída de 12px
+    const progress = elapsed / 600;
+    const alpha = (1 - progress) * (1 - progress);
+    const offsetY = progress * 12;
 
     ctx.translate(centerX, baseY + offsetY);
-
     ctx.globalAlpha = alpha;
     ctx.shadowColor = "rgba(244, 63, 94, 0.5)";
     ctx.shadowBlur = 8;
-
-    // Número anterior desvaneciéndose en color rojo/rosado suave
     ctx.fillStyle = "#f43f5e";
     ctx.font = "900 32px 'Inter', system-ui, -apple-system, sans-serif";
     ctx.fillText(String(lastBrokenCombo), 0, 0);
@@ -642,6 +835,7 @@ function drawJudgement(
   height: number,
   judgement: JudgementEvent,
   comboPositionPercent: number = 55,
+  customSkinTextures: LoadedSkinTextures | null = null,
 ): void {
   const now = performance.now();
   const elapsed = now - judgement.timestamp;
@@ -652,27 +846,22 @@ function drawJudgement(
   }
 
   const centerX = width / 2;
-  // Ubicado de manera natural justo debajo del texto "COMBO" y arriba de la error bar (+22px)
-  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 22;
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 32;
 
-  // 1. Cálculo de escala elástica (impacto inicial: 1.25 -> 1.0 en los primeros 100ms)
   let scale = 1.0;
   if (elapsed < 100) {
     const p = elapsed / 100;
     scale = 1.25 - p * 0.25;
   }
 
-  // 2. Cálculo de desvanecimiento (fade out cuadrático)
   const progress = elapsed / DURATION_MS;
   const alpha = Math.max(0, 1 - progress * progress);
 
-  // 3. Pequeño desplazamiento hacia arriba (o caída con temblor si es MISS)
   let offsetY = -progress * 8;
   let offsetX = 0;
   if (judgement.tier === "MISS") {
     offsetY = progress * 6;
     if (elapsed < 150) {
-      // Sutil shake horizontal en los primeros 150ms de un Miss
       offsetX = Math.sin(elapsed * 0.1) * 3 * (1 - elapsed / 150);
     }
   }
@@ -681,43 +870,45 @@ function drawJudgement(
   ctx.translate(centerX + offsetX, baseY + offsetY);
   ctx.scale(scale, scale);
   ctx.globalAlpha = alpha;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
 
-  // Estilos según el tier de juicio
-  let textColor = "#38bdf8";
-  let glowColor = "rgba(56, 189, 248, 0.8)";
-  let label = judgement.tier;
-
-  switch (judgement.tier) {
-    case "MAX":
-      textColor = "#38bdf8"; // Cian Neón
-      glowColor = "rgba(56, 189, 248, 0.85)";
-      break;
-    case "PERFECT":
-      textColor = "#fbbf24"; // Dorado Brillante
-      glowColor = "rgba(251, 191, 36, 0.85)";
-      break;
-    case "GREAT":
-      textColor = "#34d399"; // Verde Esmeralda
-      glowColor = "rgba(52, 211, 153, 0.75)";
-      break;
-    case "GOOD":
-      textColor = "#818cf8"; // Azul Púrpura
-      glowColor = "rgba(129, 140, 248, 0.75)";
-      break;
-    case "MISS":
-      textColor = "#f43f5e"; // Rojo Rosado
-      glowColor = "rgba(244, 63, 94, 0.75)";
-      break;
+  let judgeImg: HTMLImageElement | null = null;
+  if (customSkinTextures) {
+    switch (judgement.tier) {
+      case "MAX": judgeImg = customSkinTextures.hit300g ?? customSkinTextures.hit300; break;
+      case "PERFECT": judgeImg = customSkinTextures.hit300; break;
+      case "GREAT": judgeImg = customSkinTextures.hit200; break;
+      case "GOOD": judgeImg = customSkinTextures.hit100; break;
+      case "MISS": judgeImg = customSkinTextures.hit0; break;
+    }
   }
 
-  ctx.shadowColor = glowColor;
-  ctx.shadowBlur = elapsed < 120 ? 14 : 6;
-  ctx.fillStyle = textColor;
-  ctx.font = "900 15px 'Inter', system-ui, -apple-system, sans-serif";
-  ctx.letterSpacing = "2px";
-  ctx.fillText(label, 0, 0);
+  if (judgeImg && judgeImg.complete && judgeImg.naturalWidth > 0) {
+    const imgW = judgeImg.naturalWidth;
+    const imgH = judgeImg.naturalHeight;
+    ctx.drawImage(judgeImg, -imgW / 2, -imgH / 2, imgW, imgH);
+  } else {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    let textColor = "#38bdf8";
+    let glowColor = "rgba(56, 189, 248, 0.8)";
+    let label = judgement.tier;
+
+    switch (judgement.tier) {
+      case "MAX": textColor = "#38bdf8"; glowColor = "rgba(56, 189, 248, 0.85)"; break;
+      case "PERFECT": textColor = "#fbbf24"; glowColor = "rgba(251, 191, 36, 0.85)"; break;
+      case "GREAT": textColor = "#34d399"; glowColor = "rgba(52, 211, 153, 0.75)"; break;
+      case "GOOD": textColor = "#818cf8"; glowColor = "rgba(129, 140, 248, 0.75)"; break;
+      case "MISS": textColor = "#f43f5e"; glowColor = "rgba(244, 63, 94, 0.75)"; break;
+    }
+
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = elapsed < 120 ? 14 : 6;
+    ctx.fillStyle = textColor;
+    ctx.font = "900 15px 'Inter', system-ui, -apple-system, sans-serif";
+    ctx.letterSpacing = "2px";
+    ctx.fillText(label, 0, 0);
+  }
 
   ctx.restore();
 }
@@ -744,7 +935,7 @@ function drawHitErrorBar(
   }
 
   const centerX = width / 2;
-  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 38;
+  const baseY = height * (Math.max(25, Math.min(90, comboPositionPercent)) / 100) + 56;
 
   const barWidth = 170;
   const halfBar = barWidth / 2;
@@ -775,6 +966,9 @@ function drawHitErrorBar(
   // 3. Ticks de los hits recientes
   for (let i = 0; i < activeHits.length; i++) {
     const hit = activeHits[i];
+    if (!hit) {
+      continue;
+    }
     const age = now - hit.timestamp;
     const progress = age / FADE_DURATION_MS;
     const alpha = Math.max(0, 1 - progress);
@@ -888,46 +1082,6 @@ function drawNoteBar(
   ctx.fillRect(x, topY + noteHeight - 2, noteWidth, 2);
 }
 
-/** Dibuja una hold note con cuerpo translúcido y cabeza metálica. */
-function drawHoldNoteBar(
-  ctx: CanvasRenderingContext2D,
-  centerX: number,
-  headY: number,
-  tailY: number,
-  noteWidth: number,
-  skin: LaneSkinColor,
-  isHolding: boolean = false,
-  noteHeight: number = 16,
-  scrollDirection: "down" | "up" = "down",
-): void {
-  const x = Math.round(centerX - noteWidth / 2);
-  const top = Math.min(headY, tailY);
-  const bottom = Math.max(headY, tailY);
-  const height = Math.max(bottom - top, 1);
-
-  // Cuerpo de la hold note
-  ctx.fillStyle = isHolding
-    ? hexToRgba(skin.mid, RENDER_CONFIG.notes.ln.holdingBodyOpacity)
-    : skin.holdBody;
-  ctx.fillRect(x + 2, top, noteWidth - 4, height);
-
-  // Bordes laterales sutiles del cuerpo
-  ctx.fillStyle = isHolding
-    ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingBorderOpacity)
-    : skin.border;
-  ctx.fillRect(x + 1, top, 2, height);
-  ctx.fillRect(x + noteWidth - 3, top, 2, height);
-
-  // Cola sutil de la hold note
-  ctx.fillStyle = isHolding
-    ? hexToRgba(skin.top, RENDER_CONFIG.notes.ln.holdingTailOpacity)
-    : skin.border;
-  ctx.fillRect(x + 1, tailY - 1, noteWidth - 2, 2);
-
-  // Cabeza de la nota
-  drawNoteBar(ctx, centerX, headY, noteWidth, skin, noteHeight, scrollDirection);
-}
-
 /**
  * Dibuja rectángulos rojos semitransparentes en cada carril indicando la zona
  * donde pulsar una tecla es VÁLIDO (±140ms de cada nota).
@@ -960,6 +1114,9 @@ function drawDebugHitWindows(
     }
 
     const note = hitObjects[i];
+    if (!note) {
+      continue;
+    }
     const columnIndex = Math.min(note.column, keyCount - 1);
     const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);
     const x = Math.round(centerX - laneWidth / 2);

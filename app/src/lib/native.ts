@@ -164,11 +164,76 @@ export async function searchBeatmaps(
  * Invalida el caché del índice de búsqueda para forzar un rebuild en la próxima consulta.
  * Usar cuando se sabe que la carpeta Songs cambió (ej: descarga de nuevos mapas).
  */
-export async function invalidateSearchIndex(): Promise<void> {
-  if (!isTauri()) return;
+export interface SkinMetadata {
+  name: string;
+  author?: string | null;
+  folder_name: string;
+  folder_path: string;
+}
+
+export interface SkinManiaConfig {
+  keys: number;
+  column_start?: number | null;
+  column_width: number[];
+  column_spacing: number[];
+  hit_position?: number | null;
+  light_position?: number | null;
+  score_position?: number | null;
+  combo_position?: number | null;
+  judgement_line?: boolean | null;
+  upside_down?: boolean | null;
+  barline_height?: number | null;
+
+  key_images: (string | null)[];
+  key_images_d: (string | null)[];
+
+  note_images: (string | null)[];
+  note_images_h: (string | null)[];
+  note_images_l: (string | null)[];
+  note_images_t: (string | null)[];
+
+  hit_0?: string | null;
+  hit_50?: string | null;
+  hit_100?: string | null;
+  hit_200?: string | null;
+  hit_300?: string | null;
+  hit_300g?: string | null;
+
+  stage_hint?: string | null;
+  lighting_n?: string | null;
+  lighting_l?: string | null;
+}
+
+/**
+ * Lista todas las skins instaladas en la carpeta Skins de osu!.
+ */
+export async function listOsuSkins(customDir?: string | null): Promise<SkinMetadata[]> {
+  if (!isTauri()) return [];
   try {
-    await invoke("invalidate_search_index");
+    return await invoke<SkinMetadata[]>("list_osu_skins", {
+      customDir: customDir ?? null,
+    });
   } catch (error) {
-    console.error("Error al invalidar el índice de búsqueda:", error);
+    console.error("Error al listar skins de osu!:", error);
+    return [];
+  }
+}
+
+/**
+ * Carga y resuelve la configuración de skin.ini para un número de teclas específico (7K o 4K).
+ */
+export async function loadOsuSkinConfig(
+  skinFolderPath: string,
+  keyCount: number = 7,
+): Promise<SkinManiaConfig | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<SkinManiaConfig>("load_osu_skin_config", {
+      skinFolderPath,
+      keyCount,
+    });
+  } catch (error) {
+    console.error("Error al cargar configuración de skin:", error);
+    return null;
   }
 }

@@ -26,6 +26,8 @@ export interface PlaybackControls {
   pause: () => void;
   seekTo: (timeMs: number) => void;
   restart: () => void;
+  /** Reproduce un hitsound instantáneo con volumen calibrado */
+  playHitSound: (volume?: number) => void;
   /** Reloj en vivo que el bucle de dibujo del canvas lee en cada fotograma. */
   currentTimeMsRef: RefObject<number>;
 }
@@ -337,6 +339,12 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
     play();
   }
 
+  function playHitSound(customVol?: number): void {
+    if (!hitsoundsEnabledRef.current) return;
+    const effVol = customVol ?? hitsoundVolumeRef.current / 100;
+    hitSoundEngine.playHit(effVol);
+  }
+
   return {
     isPlaying,
     speed,
@@ -348,6 +356,7 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
     pause,
     seekTo,
     restart,
+    playHitSound,
     currentTimeMsRef,
   };
 }

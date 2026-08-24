@@ -108,7 +108,7 @@ export class PlayEngine {
 
     for (let i = 0; i < this.hitObjects.length; i++) {
       const note = this.hitObjects[i];
-      if (note.column !== laneIndex) continue;
+      if (!note || note.column !== laneIndex) continue;
       if (this.judgedMap.has(i)) continue;
 
       const delta = Math.abs(effectiveTime - note.timeMs);
@@ -120,6 +120,7 @@ export class PlayEngine {
 
     if (bestIndex !== -1) {
       const note = this.hitObjects[bestIndex];
+      if (!note) return false;
       this.judgedMap.set(bestIndex, "hit");
 
       // Calcular desvío de tiempo exacto (ms) y determinar el juicio
@@ -182,6 +183,73 @@ export class PlayEngine {
   }
 
   /**
+   * Ejecuta la lógica de Autoplay perfecta (0ms de error, MAX score, hitsounds e iluminación de carril).
+   */
+  public updateAutoplay(
+    currentTimeMs: number,
+    onHitSound?: (effectiveVol: number) => void,
+    hitsoundVolume: number = 20,
+  ): void {
+    const now = performance.now();
+    let hitCount = 0;
+
+    for (let i = 0; i < this.hitObjects.length; i++) {
+      const note = this.hitObjects[i];
+      if (!note || this.judgedMap.has(i)) continue;
+
+      // Al alcanzar el tiempo exacto de la nota
+      if (currentTimeMs >= note.timeMs) {
+        this.judgedMap.set(i, "hit");
+        this.lastJudgement = { tier: "MAX", timestamp: now };
+        this.recentHitErrors.push({ errorMs: 0, timestamp: now });
+        if (this.recentHitErrors.length > 20) {
+          this.recentHitErrors.shift();
+        }
+
+        this.combo += 1;
+        if (this.combo > this.maxCombo) {
+          this.maxCombo = this.combo;
+        }
+        this.lastHitTime = now;
+        this.activeHeldLanes[note.column] = true;
+        hitCount++;
+
+        if (note.endTimeMs !== null) {
+          // LN: mantener presionada hasta el final
+          this.holdingLnMap.set(note.column, i);
+        } else {
+          // Rice note: ocultar de inmediato
+          this.hitNoteIndices.add(i);
+        }
+      }
+    }
+
+    // Reproducir hitsound con escalamiento de acorde
+    if (hitCount > 0 && onHitSound) {
+      const baseVol = hitsoundVolume / 100;
+      const chordMultiplier = 1 + Math.min(hitCount - 1, 6) * 0.30;
+      onHitSound(baseVol * chordMultiplier);
+    }
+
+    // Liberar carriles para rice notes tras un instante (80ms) o cuando termine la LN
+    for (let col = 0; col < this.keyCount; col++) {
+      if (this.holdingLnMap.has(col)) {
+        const noteIndex = this.holdingLnMap.get(col)!;
+        const note = this.hitObjects[noteIndex];
+        if (note && note.endTimeMs !== null && currentTimeMs >= note.endTimeMs) {
+          this.holdingLnMap.delete(col);
+          this.hitNoteIndices.add(noteIndex);
+          this.activeHeldLanes[col] = false;
+        } else {
+          this.activeHeldLanes[col] = true;
+        }
+      } else if (now - this.lastHitTime > 80) {
+        this.activeHeldLanes[col] = false;
+      }
+    }
+  }
+
+  /**
    * Evalúa el paso del tiempo para detectar notas que pasaron de largo sin ser pulsadas (Miss)
    * y auto-completar LNs cuya cola ya pasó.
    */
@@ -190,7 +258,7 @@ export class PlayEngine {
 
     for (let i = 0; i < this.hitObjects.length; i++) {
       const note = this.hitObjects[i];
-      if (this.judgedMap.has(i)) continue;
+      if (!note || this.judgedMap.has(i)) continue;
 
       // Si la nota ya pasó la ventana de golpe sin haber sido tocada:
       // Se registra el MISS (se rompe combo), pero NO se oculta prematuramente,
