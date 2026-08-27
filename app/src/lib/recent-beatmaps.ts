@@ -8,6 +8,7 @@ export interface RecentBeatmapItem {
   keys: number;
   bpm: number;
   cover?: string;
+  backgroundPath?: string | null;
   timestamp: number;
 }
 

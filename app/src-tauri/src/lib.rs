@@ -1,5 +1,6 @@
 mod skin;
 
+use rayon::prelude::*;
 use serde::Serialize;
 use skin::{list_skins, load_mania_skin, SkinManiaConfig, SkinMetadata};
 use std::path::Path;
@@ -182,15 +183,8 @@ fn find_background_filename(content: &str) -> Option<String> {
 
 #[tauri::command]
 fn splash_screen(app: AppHandle) -> Result<(), String> {
-    // Si aún no está listo el índice en memoria, construirlo antes de dar paso
-    if let Ok(mut guard) = SEARCH_INDEX.lock() {
-        if guard.is_none() {
-            if let Some(songs_dir) = resolve_songs_dir(&None) {
-                *guard = Some(build_search_index(&songs_dir));
-            }
-        }
-    }
-
+    // The setup thread already builds the index and closes the splash.
+    // This command is a fallback only for window management.
     if let Some(splash) = app.get_webview_window("splashscreen") {
         let _ = splash.close();
     }
@@ -439,146 +433,146 @@ fn parse_osu_mode_only(path: &Path) -> Option<(u8, u8)> {
     Some((mode, key_count))
 }
 
-/// Construye el índice completo escaneando la carpeta Songs una sola vez.
-/// Lee un solo .osu por carpeta para metadatos, y un scan rápido del resto
-/// para key_modes/diff_count.
+/// Builds the full search index by scanning the Songs folder with parallel I/O.
+/// Uses rayon to process mapset folders concurrently and fuses the read_dir
+/// calls so each folder is scanned only once for both .osu files and images.
 fn build_search_index(songs_dir: &Path) -> Vec<IndexedMapset> {
-    let mut index = Vec::with_capacity(1024);
-
     let entries = match std::fs::read_dir(songs_dir) {
         Ok(e) => e,
-        Err(_) => return index,
+        Err(_) => return Vec::new(),
     };
 
-    for entry in entries.flatten() {
-        let folder_path = entry.path();
-        if !folder_path.is_dir() {
-            continue;
-        }
+    // Collect directory entries first, then process in parallel with rayon
+    let dirs: Vec<_> = entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .collect();
 
-        let folder_name = folder_path
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
+    dirs.par_iter()
+        .filter_map(|entry| process_mapset_folder(entry))
+        .collect()
+}
 
-        // Listar archivos .osu de la carpeta
-        let mut osu_files: Vec<std::path::PathBuf> = Vec::new();
-        if let Ok(osu_entries) = std::fs::read_dir(&folder_path) {
-            for osu_entry in osu_entries.flatten() {
-                let p = osu_entry.path();
-                if p.is_file() {
-                    if let Some(ext) = p.extension() {
-                        if ext.eq_ignore_ascii_case("osu") {
-                            osu_files.push(p);
-                        }
-                    }
+/// Processes a single mapset folder: scans for .osu files and images in one
+/// fused read_dir call, extracts metadata, and builds the IndexedMapset entry.
+fn process_mapset_folder(entry: &std::fs::DirEntry) -> Option<IndexedMapset> {
+    let folder_path = entry.path();
+    let folder_name = folder_path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    // Single fused read_dir: collect .osu files AND image candidates in one pass
+    let mut osu_files: Vec<std::path::PathBuf> = Vec::new();
+    let mut image_candidates: Vec<(std::path::PathBuf, u64, bool)> = Vec::new();
+
+    if let Ok(dir_entries) = std::fs::read_dir(&folder_path) {
+        for dir_entry in dir_entries.flatten() {
+            let p = dir_entry.path();
+            if !p.is_file() {
+                continue;
+            }
+            if let Some(ext) = p.extension() {
+                let ext_lower = ext.to_string_lossy().to_lowercase();
+                if ext_lower == "osu" {
+                    osu_files.push(p);
+                } else if ext_lower == "jpg"
+                    || ext_lower == "jpeg"
+                    || ext_lower == "png"
+                    || ext_lower == "webp"
+                {
+                    let size = dir_entry.metadata().ok().map(|m| m.len()).unwrap_or(0);
+                    let fname_lower = p
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_lowercase())
+                        .unwrap_or_default();
+                    let is_bg =
+                        fname_lower.contains("bg") || fname_lower.contains("background");
+                    image_candidates.push((p, size, is_bg));
                 }
             }
         }
+    }
 
-        if osu_files.is_empty() {
-            continue;
-        }
+    if osu_files.is_empty() {
+        return None;
+    }
 
-        let diff_count = osu_files.len();
+    let diff_count = osu_files.len();
 
-        // Leer metadatos completos del PRIMER .osu solamente
-        let first_meta = match parse_osu_quick_meta(&osu_files[0]) {
-            Some(m) => m,
-            None => continue,
-        };
+    // Read full metadata from the FIRST .osu only
+    let first_meta = parse_osu_quick_meta(&osu_files[0])?;
 
-        // Scan rápido de los demás para key_modes (solo Mode: y CircleSize:)
-        let mut key_modes_set = std::collections::BTreeSet::new();
-        let first_mode_label = if first_meta.mode == 3 {
-            format!("{}K", first_meta.key_count)
-        } else {
-            "STD".to_string()
-        };
-        key_modes_set.insert(first_mode_label);
+    // Quick scan of remaining files for key_modes (Mode: and CircleSize: only)
+    let mut key_modes_set = std::collections::BTreeSet::new();
+    let first_mode_label = if first_meta.mode == 3 {
+        format!("{}K", first_meta.key_count)
+    } else {
+        "STD".to_string()
+    };
+    key_modes_set.insert(first_mode_label);
 
-        for osu_file in osu_files.iter().skip(1) {
-            if let Some((mode, kc)) = parse_osu_mode_only(osu_file) {
-                let label = if mode == 3 {
-                    format!("{}K", kc)
-                } else {
-                    "STD".to_string()
-                };
-                key_modes_set.insert(label);
-            }
-        }
-
-        // Precalcular search_text en lowercase para búsquedas O(1) de string matching
-        let search_text = format!(
-            "{} {} {} {}",
-            folder_name.to_lowercase(),
-            first_meta.title.to_lowercase(),
-            first_meta.artist.to_lowercase(),
-            first_meta.creator.to_lowercase(),
-        );
-
-        // Resolver background_path (primero desde el archivo parsed, luego fallback a scan de imágenes de la carpeta)
-        let background_path = if let Some(ref bg_file) = first_meta.background_filename {
-            let direct = folder_path.join(bg_file.replace('\\', "/"));
-            if direct.exists() && direct.is_file() {
-                Some(direct.to_string_lossy().into_owned())
+    for osu_file in osu_files.iter().skip(1) {
+        if let Some((mode, kc)) = parse_osu_mode_only(osu_file) {
+            let label = if mode == 3 {
+                format!("{}K", kc)
             } else {
-                // Si la ruta directa no existe, buscar en la carpeta
-                find_image_fallback_in_dir(&folder_path)
-            }
+                "STD".to_string()
+            };
+            key_modes_set.insert(label);
+        }
+    }
+
+    // Precompute lowercase search_text for O(1) string matching
+    let search_text = format!(
+        "{} {} {} {}",
+        folder_name.to_lowercase(),
+        first_meta.title.to_lowercase(),
+        first_meta.artist.to_lowercase(),
+        first_meta.creator.to_lowercase(),
+    );
+
+    // Resolve background_path: prefer parsed filename, fallback to fused image candidates
+    let background_path = if let Some(ref bg_file) = first_meta.background_filename {
+        let direct = folder_path.join(bg_file.replace('\\', "/"));
+        if direct.exists() && direct.is_file() {
+            Some(direct.to_string_lossy().into_owned())
         } else {
-            find_image_fallback_in_dir(&folder_path)
-        };
+            pick_best_image(&mut image_candidates)
+        }
+    } else {
+        pick_best_image(&mut image_candidates)
+    };
 
-        index.push(IndexedMapset {
-            path: osu_files[0].to_string_lossy().into_owned(),
-            title: first_meta.title,
-            artist: first_meta.artist,
-            creator: first_meta.creator,
-            folder_name,
-            diff_count,
-            key_modes: key_modes_set.into_iter().collect(),
-            preview_version: first_meta.version,
-            background_path,
-            search_text,
-        });
-    }
-
-    index
+    Some(IndexedMapset {
+        path: osu_files[0].to_string_lossy().into_owned(),
+        title: first_meta.title,
+        artist: first_meta.artist,
+        creator: first_meta.creator,
+        folder_name,
+        diff_count,
+        key_modes: key_modes_set.into_iter().collect(),
+        preview_version: first_meta.version,
+        background_path,
+        search_text,
+    })
 }
 
-/// Fallback rápido para encontrar la imagen de fondo principal en un directorio
-fn find_image_fallback_in_dir(dir: &Path) -> Option<String> {
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        let mut candidates: Vec<(std::path::PathBuf, u64, bool)> = Vec::new();
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_file() {
-                if let Some(ext) = p.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if ext_str == "jpg" || ext_str == "jpeg" || ext_str == "png" || ext_str == "webp" {
-                        let fname_lower = p.file_name().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-                        let is_named_bg = fname_lower.contains("bg") || fname_lower.contains("background");
-                        let size = entry.metadata().ok().map(|m| m.len()).unwrap_or(0);
-                        candidates.push((p, size, is_named_bg));
-                    }
-                }
-            }
-        }
-
-        if !candidates.is_empty() {
-            candidates.sort_by(|a, b| {
-                if a.2 != b.2 {
-                    b.2.cmp(&a.2)
-                } else {
-                    b.1.cmp(&a.1)
-                }
-            });
-            return Some(candidates[0].0.to_string_lossy().into_owned());
-        }
+/// Picks the best image from pre-collected candidates (prioritizes bg-named, then largest).
+fn pick_best_image(candidates: &mut Vec<(std::path::PathBuf, u64, bool)>) -> Option<String> {
+    if candidates.is_empty() {
+        return None;
     }
-    None
+    candidates.sort_by(|a, b| {
+        if a.2 != b.2 {
+            b.2.cmp(&a.2)
+        } else {
+            b.1.cmp(&a.1)
+        }
+    });
+    Some(candidates[0].0.to_string_lossy().into_owned())
 }
+
 
 #[tauri::command]
 async fn search_beatmaps(
@@ -741,24 +735,30 @@ pub fn run() {
             std::thread::spawn(move || {
                 let start = std::time::Instant::now();
 
-                // 1. Calentar e indexar canciones de osu! antes de cerrar el splashscreen
+                // 1. Build search index with parallel I/O (rayon)
                 if let Some(songs_dir) = resolve_songs_dir(&None) {
                     let new_index = build_search_index(&songs_dir);
+                    let count = new_index.len();
                     if let Ok(mut guard) = SEARCH_INDEX.lock() {
                         if guard.is_none() {
                             *guard = Some(new_index);
                         }
                     }
+                    log::info!(
+                        "[Splash] Indexed {} mapsets in {:.1}s",
+                        count,
+                        start.elapsed().as_secs_f64()
+                    );
                 }
 
-                // 2. Garantizar que el splashscreen se muestre al menos 1200ms por estética
+                // 2. Brief minimum display so the splash doesn't flash
                 let elapsed = start.elapsed();
-                let min_duration = std::time::Duration::from_millis(1200);
+                let min_duration = std::time::Duration::from_millis(400);
                 if elapsed < min_duration {
                     std::thread::sleep(min_duration - elapsed);
                 }
 
-                // 3. Una vez listos los mapas e índice, cerrar el splash y mostrar la ventana principal
+                // 3. Close splash and show main window
                 if let Some(splash) = handle.get_webview_window("splashscreen") {
                     let _ = splash.close();
                 }
@@ -766,6 +766,11 @@ pub fn run() {
                     let _ = main.show();
                     let _ = main.set_focus();
                 }
+
+                log::info!(
+                    "[Splash] Total startup time: {:.1}s",
+                    start.elapsed().as_secs_f64()
+                );
             });
 
             Ok(())

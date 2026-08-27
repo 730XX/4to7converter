@@ -8,6 +8,7 @@ import { OsuProcessCard } from "./OsuProcessCard";
 import { DropZone } from "./DropZone";
 import { RecentBeatmaps } from "./RecentBeatmaps";
 import { ShortcutBar } from "./ShortcutBar";
+import { BgaBackground } from "./BgaBackground";
 
 interface HomeScreenProps {
   onPathSelected: (path: string) => void;
@@ -120,6 +121,8 @@ export function HomeScreen({
 
   return (
     <div className="home-screen-wrapper">
+      <BgaBackground />
+
       <div className="home-screen-container">
         <BrandHeader onOpenSettings={onOpenSettings} onClose={onClose} />
 

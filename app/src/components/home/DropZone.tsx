@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import { FileMusic, Sparkles, UploadCloud } from "lucide-react";
+import { FileMusic, UploadCloud } from "lucide-react";
 
 interface DropZoneProps {
   onOpenFilePicker: () => void;
@@ -45,30 +45,34 @@ export function DropZone({ onOpenFilePicker, onFileSelected }: DropZoneProps) {
     >
       <div className="home-dropzone-glow bg-neon-gradient" />
       <div className="home-dropzone-inner">
-        <div className="home-dropzone-icon-row">
-          <Sparkles size={18} className="sparkle-violet" />
-          <span
-            className={`home-dropzone-icon-box bg-neon-gradient ${
-              isDragging ? "is-bouncing" : ""
-            }`}
-          >
-            {isDragging ? <UploadCloud size={30} /> : <FileMusic size={30} />}
-          </span>
-          <Sparkles size={18} className="sparkle-cyan" />
+        <div className="home-dropzone-left">
+          <div className="home-dropzone-icon-row">
+            <span
+              className={`home-dropzone-icon-box bg-neon-gradient ${
+                isDragging ? "is-bouncing" : ""
+              }`}
+            >
+              {isDragging ? <UploadCloud size={24} /> : <FileMusic size={24} />}
+            </span>
+          </div>
+
+          <div className="home-dropzone-text-group">
+            <h1 className="home-dropzone-title">Arrastra tu archivo .osu aquí</h1>
+            <p className="home-dropzone-desc">
+              Convierte beatmaps de 4K a 7K con mapeo por tramos, hitsounds y autoplay en vivo.
+            </p>
+          </div>
         </div>
 
-        <h1 className="home-dropzone-title">Arrastra tu archivo .osu aquí</h1>
-        <p className="home-dropzone-desc">
-          Convierte beatmaps de 4K a 7K con matrices de mapeo personalizadas, hitsounds y autoplay en vivo.
-        </p>
-
-        <button
-          type="button"
-          onClick={onOpenFilePicker}
-          className="home-dropzone-browse-btn"
-        >
-          Explorar archivos (.osu)
-        </button>
+        <div className="home-dropzone-actions">
+          <button
+            type="button"
+            onClick={onOpenFilePicker}
+            className="home-dropzone-browse-btn"
+          >
+            Explorar archivos (.osu)
+          </button>
+        </div>
 
         <input
           ref={inputRef}
@@ -77,17 +81,6 @@ export function DropZone({ onOpenFilePicker, onFileSelected }: DropZoneProps) {
           className="visually-hidden"
           onChange={handleInputChange}
         />
-
-        <div className="home-dropzone-chips">
-          <span className="home-chip">
-            <kbd className="mono">Ctrl + P</kbd>
-            <span>Búsqueda rápida de canciones</span>
-          </span>
-          <span className="home-chip">
-            <kbd className="mono">Ctrl + O</kbd>
-            <span>Ajustes</span>
-          </span>
-        </div>
       </div>
     </section>
   );

@@ -447,6 +447,7 @@ export default function App() {
         bpm: parsed.timingPoints[0]?.beatLength
           ? Math.round(60000 / parsed.timingPoints[0].beatLength)
           : 120,
+        backgroundPath: backgroundPath ?? null,
       });
 
       // Inicializar una sección inicial para toda la canción
