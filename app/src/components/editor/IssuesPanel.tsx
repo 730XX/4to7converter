@@ -1,5 +1,5 @@
 import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
-import type { ConversionIssue } from "../../../src/core/convert/validate";
+import type { ConversionIssue } from "../../../../src/core/convert/validate";
 
 interface IssuesPanelProps {
   issues: ConversionIssue[];

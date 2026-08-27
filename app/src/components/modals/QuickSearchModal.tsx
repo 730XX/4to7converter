@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, Sparkles, X, CornerDownLeft } from "lucide-react";
-import { searchBeatmaps, toAssetUrl, type BeatmapSearchItem } from "../lib/native";
+import { searchBeatmaps, toAssetUrl, type BeatmapSearchItem } from "../../lib/native";
 
 interface QuickSearchModalProps {
   isOpen: boolean;

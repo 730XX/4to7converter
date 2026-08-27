@@ -1,0 +1,637 @@
+.bg-neon-gradient {
+  background-image: var(--neon-gradient) !important;
+}
+
+.bg-osu-gradient {
+  background-image: var(--osu-gradient) !important;
+}
+
+.glass-panel {
+  background: rgba(18, 24, 38, 0.65);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.home-screen-wrapper {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 24px 90px 24px;
+  background-image:
+    radial-gradient(60rem 40rem at 15% -10%, rgba(56, 189, 248, 0.12), transparent),
+    radial-gradient(50rem 35rem at 90% 0%, rgba(255, 91, 138, 0.12), transparent);
+  background-attachment: fixed;
+  overflow-y: auto;
+}
+
+.home-screen-container {
+  width: 100%;
+  max-width: 1100px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 1. BRAND HEADER */
+.home-brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.home-brand-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 14px;
+}
+
+.home-brand-logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a0d14;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+}
+
+.home-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.home-brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-brand-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.home-brand-version {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+}
+
+.home-brand-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.status-ping-dot {
+  position: relative;
+  display: flex;
+  width: 6px;
+  height: 6px;
+}
+
+.ping-wave {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #34d399;
+  opacity: 0.75;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.ping-core {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.home-settings-btn,
+.home-close-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.home-settings-btn:hover,
+.home-close-btn:hover {
+  color: #ffffff;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
+.home-settings-icon {
+  transition: transform 0.4s ease;
+}
+
+.home-settings-btn:hover .home-settings-icon {
+  transform: rotate(90deg);
+}
+
+.home-settings-shortcut {
+  font-size: 0.75rem;
+}
+
+/* 2. OSU PROCESS CARD */
+.osu-process-card {
+  position: relative;
+  border-radius: 16px;
+  padding: 14px 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 91, 138, 0.25);
+  box-shadow: 0 0 24px rgba(255, 91, 138, 0.12);
+}
+
+.osu-process-backdrop {
+  position: absolute;
+  inset: 0;
+  opacity: 0.15;
+  filter: blur(28px);
+  background-size: cover;
+  pointer-events: none;
+}
+
+.osu-process-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.osu-process-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.osu-process-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.osu-process-icon-box.is-detected {
+  background: rgba(255, 91, 138, 0.15);
+  color: #ff5b8a;
+  border-color: rgba(255, 91, 138, 0.35);
+}
+
+.osu-process-icon-box.is-idle {
+  background: rgba(255, 255, 255, 0.05);
+  color: #64748b;
+}
+
+.osu-process-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.osu-process-status-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ff5b8a;
+}
+
+.osu-process-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.osu-process-meta {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.osu-process-idle-hint {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.osu-process-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.osu-process-load-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(255, 91, 138, 0.45);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+
+.osu-process-load-btn:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 26px rgba(255, 91, 138, 0.65);
+}
+
+.osu-process-load-btn:active {
+  transform: scale(0.97);
+}
+
+.osu-process-refresh-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.osu-process-refresh-btn:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* 3. MAIN DROP ZONE */
+.home-dropzone {
+  position: relative;
+  border-radius: 24px;
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  padding: 48px 24px;
+  text-align: center;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home-dropzone:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 32px rgba(56, 189, 248, 0.08);
+}
+
+.home-dropzone.is-dragging {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.06);
+  transform: scale(1.01);
+  box-shadow: 0 0 40px rgba(56, 189, 248, 0.25);
+}
+
+.home-dropzone-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.home-dropzone.is-dragging .home-dropzone-glow {
+  opacity: 0.15;
+}
+
+.home-dropzone-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.home-dropzone-icon-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.sparkle-violet {
+  color: #a855f7;
+}
+
+.sparkle-cyan {
+  color: #38bdf8;
+}
+
+.home-dropzone-icon-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a0d14;
+  box-shadow: 0 0 24px rgba(168, 85, 247, 0.35);
+  transition: transform 0.3s ease;
+}
+
+.home-dropzone-icon-box.is-bouncing {
+  transform: scale(1.15) rotate(4deg);
+}
+
+.home-dropzone-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  margin: 0;
+}
+
+.home-dropzone-desc {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  max-width: 480px;
+  margin: 8px 0 0 0;
+  line-height: 1.45;
+}
+
+.home-dropzone-browse-btn {
+  margin-top: 22px;
+  padding: 10px 22px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home-dropzone-browse-btn:hover {
+  background: rgba(56, 189, 248, 0.22);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+  transform: translateY(-1px);
+}
+
+.home-dropzone-chips {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.home-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.home-chip kbd {
+  color: #ffffff;
+  font-size: 0.68rem;
+}
+
+/* 4. RECENT BEATMAPS */
+.home-recents-section {
+  width: 100%;
+}
+
+.home-recents-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.home-recents-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.home-recents-count {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.home-recents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.home-recent-card {
+  position: relative;
+  border-radius: 14px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home-recent-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+.home-recent-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  filter: blur(20px);
+  background-size: cover;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.home-recent-card:hover .home-recent-glow {
+  opacity: 0.35;
+}
+
+.home-recent-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.home-recent-thumbnail {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  background-size: cover;
+}
+
+.home-recent-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-recent-song-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-recent-song-artist {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.home-recent-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.home-recent-key-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.home-recent-time {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.home-recent-play-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: all 0.2s ease;
+}
+
+.home-recent-card:hover .home-recent-play-icon {
+  opacity: 1;
+  transform: scale(1);
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+}
+
+/* 5. SHORTCUT BAR */
+.home-shortcut-bar {
+  position: fixed;
+  inset-x: 0;
+  bottom: 0;
+  z-index: 30;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 13, 20, 0.85);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 8px 24px;
+}
+
+.home-shortcut-bar-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.home-shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.home-shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.home-shortcut-keys kbd {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.65rem;
+  color: #ffffff;
+}
+
+.home-shortcut-label {
+  color: #64748b;
+}

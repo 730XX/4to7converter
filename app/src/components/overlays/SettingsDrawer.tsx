@@ -15,8 +15,8 @@ import {
   Palette,
   RefreshCw,
 } from "lucide-react";
-import { formatKeyCode, SETTINGS_LIMITS, type UserSettings } from "../lib/settings";
-import { listOsuSkins, type SkinMetadata } from "../lib/native";
+import { formatKeyCode, SETTINGS_LIMITS, type UserSettings } from "../../lib/settings";
+import { listOsuSkins, type SkinMetadata } from "../../lib/native";
 
 interface SettingsDrawerProps {
   isOpen: boolean;

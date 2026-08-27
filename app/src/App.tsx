@@ -7,19 +7,19 @@ import type { ConversionIssue } from "../../src/core/convert/validate";
 import { parseOsuFile } from "../../src/core/osu/parser";
 import { OsuParseError } from "../../src/core/osu/types";
 import type { OsuBeatmap } from "../../src/core/osu/types";
-import { BeatmapHeaderCard } from "./components/BeatmapHeaderCard";
-import { DebugConsole } from "./components/DebugConsole";
-import { FileDropZone } from "./components/FileDropZone";
-import { IssuesPanel } from "./components/IssuesPanel";
-import { LaneMapper } from "./components/LaneMapper";
-import { PlaybackFooter } from "./components/PlaybackFooter";
-import { Playfield } from "./components/Playfield";
-import { QuickSearchModal } from "./components/QuickSearchModal";
-import { QuickDiffSwitcherModal } from "./components/QuickDiffSwitcherModal";
-import { QuickToastOsd, type OsdState } from "./components/QuickToastOsd";
-import { SettingsDrawer } from "./components/SettingsDrawer";
-import { KeybindsModal } from "./components/KeybindsModal";
-import { StatsBar } from "./components/StatsBar";
+import { BeatmapHeaderCard } from "./components/editor/BeatmapHeaderCard";
+import { DebugConsole } from "./components/overlays/DebugConsole";
+import { HomeScreen } from "./components/home/HomeScreen";
+import { IssuesPanel } from "./components/editor/IssuesPanel";
+import { LaneMapper } from "./components/editor/LaneMapper";
+import { PlaybackFooter } from "./components/playback/PlaybackFooter";
+import { Playfield } from "./components/playfield/Playfield";
+import { QuickSearchModal } from "./components/modals/QuickSearchModal";
+import { QuickDiffSwitcherModal } from "./components/modals/QuickDiffSwitcherModal";
+import { QuickToastOsd, type OsdState } from "./components/overlays/QuickToastOsd";
+import { SettingsDrawer } from "./components/overlays/SettingsDrawer";
+import { KeybindsModal } from "./components/modals/KeybindsModal";
+import { StatsBar } from "./components/editor/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
 import { appLogger } from "./lib/logger";
@@ -56,6 +56,19 @@ import {
   type LanePreset,
 } from "./lib/lane-presets";
 import { usePlayback } from "./lib/use-playback";
+import { saveRecentBeatmap } from "./lib/recent-beatmaps";
+import { formatTimeMs } from "./preview/preview-math";
+import {
+  type UiTimelineSection,
+  createInitialSection,
+  splitSectionAt,
+  deleteSection,
+  toCoreSections,
+  getMapStorageKey,
+  loadMapSections,
+  saveMapSections,
+  updateSectionBoundary,
+} from "./lib/timeline-sections";
 
 const TARGET_KEY_COUNT = 7;
 
@@ -97,6 +110,53 @@ export default function App() {
   const [customSkinTextures, setCustomSkinTextures] = useState<LoadedSkinTextures | null>(null);
   const [osd, setOsd] = useState<OsdState | null>(null);
   const osdTimerRef = useRef<number | null>(null);
+
+  // Secciones temporales de la línea de tiempo
+  const [sections, setSections] = useState<UiTimelineSection[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+  const activeSectionIdRef = useRef(activeSectionId);
+  activeSectionIdRef.current = activeSectionId;
+
+  // Clave de almacenamiento única para el mapa y dificultad actual
+  const mapStorageKey = useMemo(() => {
+    if (!source) return null;
+    return getMapStorageKey(
+      sourcePath,
+      fileName,
+      source.artist,
+      source.title,
+      source.version,
+    );
+  }, [source, sourcePath, fileName]);
+
+
+
+  // Cargar secciones guardadas previamente para este mapa/dificultad o crear sección inicial
+  useEffect(() => {
+    if (!source || !mapStorageKey) return;
+
+    const saved = loadMapSections(mapStorageKey);
+    if (saved && saved.length > 0) {
+      setSections(saved);
+      setActiveSectionId(saved[0]?.id ?? null);
+      if (saved[0]) {
+        setLaneMapState(saved[0].laneMapState);
+      }
+    } else {
+      const lastTime = source.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
+      const initial = createInitialSection(Math.max(lastTime, 10000), laneMapState);
+      setSections(initial);
+      setActiveSectionId(initial[0]?.id ?? null);
+    }
+  }, [mapStorageKey]);
+
+  // Guardar automáticamente cualquier cambio en las secciones para este mapa
+  useEffect(() => {
+    if (!mapStorageKey || sections.length === 0) return;
+    saveMapSections(mapStorageKey, sections);
+  }, [sections, mapStorageKey]);
 
   // Cargar texturas de la skin seleccionada (7K)
   useEffect(() => {
@@ -178,6 +238,13 @@ export default function App() {
 
       // Ignorar si el usuario está escribiendo en un input
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Ctrl + B: Dividir sección en la posición de tiempo actual
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyB") {
+        event.preventDefault();
+        handleSplitSection();
         return;
       }
 
@@ -370,6 +437,23 @@ export default function App() {
       setIsFileModalOpen(false);
       setIsQuickSearchOpen(false);
 
+      // Guardar en el historial de mapas recientes
+      saveRecentBeatmap({
+        path,
+        title: parsed.title || "Unknown Title",
+        artist: parsed.artist || "Unknown Artist",
+        difficulty: parsed.version || "Normal",
+        keys: parsed.keyCount || 4,
+        bpm: parsed.timingPoints[0]?.beatLength
+          ? Math.round(60000 / parsed.timingPoints[0].beatLength)
+          : 120,
+      });
+
+      // Inicializar una sección inicial para toda la canción
+      const initialSecs = createInitialSection(Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000), laneMapState);
+      setSections(initialSecs);
+      setActiveSectionId(initialSecs[0]?.id ?? null);
+
       // Cargar lista de todas las dificultades del mapset
       listBeatmapDifficulties(path)
         .then((diffs) => {
@@ -411,6 +495,10 @@ export default function App() {
       setLoadError(null);
       setAudioUrl(null);
       setIsFileModalOpen(false);
+
+      const initialSecs = createInitialSection(300000, laneMapState);
+      setSections(initialSecs);
+      setActiveSectionId(initialSecs[0]?.id ?? null);
     } catch (error) {
       if (error instanceof OsuParseError || error instanceof ConversionError) {
         setLoadError({ message: error.message, code: error.code });
@@ -440,6 +528,76 @@ export default function App() {
     setAudioUrl(null);
     setBackgroundUrl(null);
     setLaneMapState(createDefaultLaneMapState());
+    setSections([]);
+    setActiveSectionId(null);
+  }
+
+  function handleSplitSection(): void {
+    if (!source || playbackRef.current === null) return;
+    const curTime = playbackRef.current.currentTimeMsRef.current;
+    const lastObjTime = source.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
+    const duration = playbackRef.current.durationMs > 0 ? playbackRef.current.durationMs : Math.max(lastObjTime, 1000);
+
+    const { newSections, createdSectionId } = splitSectionAt(
+      sectionsRef.current,
+      curTime,
+      duration,
+    );
+
+    if (createdSectionId !== null) {
+      setSections(newSections);
+      setActiveSectionId(createdSectionId);
+      const createdSec = newSections.find((s) => s.id === createdSectionId);
+      if (createdSec) {
+        setLaneMapState(createdSec.laneMapState);
+      }
+      triggerOsd({
+        type: "generic",
+        title: "Sección dividida",
+        value: formatTimeMs(curTime),
+      });
+    }
+  }
+
+  function handleSelectSection(sectionId: string): void {
+    setActiveSectionId(sectionId);
+    const sec = sections.find((s) => s.id === sectionId);
+    if (sec) {
+      setLaneMapState(sec.laneMapState);
+    }
+  }
+
+  function handleDeleteSection(sectionId: string): void {
+    const updated = deleteSection(sections, sectionId);
+    setSections(updated);
+    if (activeSectionId === sectionId) {
+      const fallback = updated[0];
+      if (fallback) {
+        setActiveSectionId(fallback.id);
+        setLaneMapState(fallback.laneMapState);
+      } else {
+        setActiveSectionId(null);
+      }
+    }
+    triggerOsd({
+      type: "generic",
+      title: "Sección eliminada",
+      value: "Fusionada",
+    });
+  }
+
+  function handleUpdateBoundary(leftSectionIndex: number, newCutTimeMs: number): void {
+    const updated = updateSectionBoundary(sections, leftSectionIndex, newCutTimeMs);
+    setSections(updated);
+  }
+
+  function handleLaneMapChange(nextState: LaneMapState): void {
+    setLaneMapState(nextState);
+    if (activeSectionId && sections.length > 0) {
+      setSections((prev) =>
+        prev.map((s) => (s.id === activeSectionId ? { ...s, laneMapState: nextState } : s)),
+      );
+    }
   }
 
   const converted = useMemo(
@@ -450,8 +608,9 @@ export default function App() {
             laneMap: toLaneMap(laneMapState),
             targetKeyCount: TARGET_KEY_COUNT,
             zeroLn,
+            sections: toCoreSections(sections),
           }),
-    [source, laneMapState, zeroLn],
+    [source, laneMapState, zeroLn, sections],
   );
 
   const issues = useMemo<ConversionIssue[]>(
@@ -483,7 +642,20 @@ export default function App() {
   });
   playbackRef.current = playback;
 
-  const [isKiaiActive, setIsKiaiActive] = useState(false);
+
+  // Sincronizar automáticamente la sección activa y su matriz de conversión según el tiempo de reproducción
+  useEffect(() => {
+    if (sections.length <= 1) return;
+    const curTime = playback.timerTimeMs;
+    const matchingSection = sections.find(
+      (sec) => curTime >= sec.startMs && curTime < sec.endMs,
+    );
+
+    if (matchingSection && matchingSection.id !== activeSectionId) {
+      setActiveSectionId(matchingSection.id);
+      setLaneMapState(matchingSection.laneMapState);
+    }
+  }, [playback.timerTimeMs, sections, activeSectionId]);
 
   // Modular el brillo del fondo difuminado según el Kiai Time (Build-up 3s y Flash de drop)
   useEffect(() => {
@@ -499,9 +671,6 @@ export default function App() {
         kiaiIntervals,
         curTime,
       );
-
-      // Sincronizar estado booleano de Kiai para el UI (solo cuando cambie)
-      setIsKiaiActive((prev) => (prev !== isInKiai ? isInKiai : prev));
 
       if (backdropRef.current) {
         // Brillo base según el ajuste del usuario (0.05 a 1.0)
@@ -546,6 +715,15 @@ export default function App() {
 
   function handleApplyPreset(preset: LanePreset): void {
     setLaneMapState(preset.laneMapState);
+    if (activeSectionId && sections.length > 0) {
+      setSections((prev) =>
+        prev.map((s) =>
+          s.id === activeSectionId
+            ? { ...s, laneMapState: preset.laneMapState, presetId: preset.id, presetName: preset.name }
+            : s,
+        ),
+      );
+    }
   }
 
   async function handleExport(): Promise<void> {
@@ -635,13 +813,12 @@ export default function App() {
   if (source === null || converted === null || fileName === null) {
     return (
       <>
-        <main className="app-shell">
-          <FileDropZone
-            onPathSelected={(path) => void handlePathSelected(path)}
-            onFileSelected={(file) => void handleFileSelected(file)}
-          />
-          <DebugConsole />
-        </main>
+        <HomeScreen
+          onPathSelected={(path) => void handlePathSelected(path)}
+          onFileSelected={(file) => void handleFileSelected(file)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
+        <DebugConsole />
         <QuickSearchModal
           isOpen={isQuickSearchOpen}
           onClose={() => setIsQuickSearchOpen(false)}
@@ -700,11 +877,13 @@ export default function App() {
               state={laneMapState}
               sourceKeyCount={source.keyCount}
               targetKeyCount={TARGET_KEY_COUNT}
-              onChange={setLaneMapState}
+              onChange={handleLaneMapChange}
               presets={presets}
               onSavePreset={handleSavePreset}
               onDeletePreset={handleDeletePreset}
               onApplyPreset={handleApplyPreset}
+              activeSection={sections.find((s) => s.id === activeSectionId) ?? null}
+              totalSectionsCount={sections.length}
             />
             <StatsBar
               source={source}
@@ -756,6 +935,12 @@ export default function App() {
               return next;
             });
           }}
+          sections={sections}
+          activeSectionId={activeSectionId}
+          onSelectSection={handleSelectSection}
+          onSplitSection={handleSplitSection}
+          onDeleteSection={handleDeleteSection}
+          onUpdateBoundary={handleUpdateBoundary}
         />
       </main>
 
@@ -796,9 +981,9 @@ export default function App() {
       {isFileModalOpen && (
         <div className="file-modal-overlay" onClick={() => setIsFileModalOpen(false)}>
           <div className="file-modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <FileDropZone
-              onPathSelected={(path) => void handlePathSelected(path)}
-              onFileSelected={(file) => void handleFileSelected(file)}
+            <HomeScreen
+              onPathSelected={(path: string) => void handlePathSelected(path)}
+              onFileSelected={(file: File) => void handleFileSelected(file)}
               onClose={() => setIsFileModalOpen(false)}
             />
           </div>

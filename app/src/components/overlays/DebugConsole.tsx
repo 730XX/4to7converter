@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bug, Check, Copy, ChevronDown, ChevronUp, Trash2, Terminal, X } from "lucide-react";
-import { appLogger, type LogEntry } from "../lib/logger";
+import { appLogger, type LogEntry } from "../../lib/logger";
 
 /**
  * Consola de Debugging integrada directamente en la aplicación.

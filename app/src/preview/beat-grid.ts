@@ -92,10 +92,11 @@ export function evaluateDynamicRhythm(
   // 1. Obtener sección de BPM activa
   let activeSection: TimingSectionInfo | null = null;
   if (timingSections.length > 0) {
-    activeSection = timingSections[0];
+    activeSection = timingSections[0] ?? null;
     for (let i = 0; i < timingSections.length; i++) {
-      if (timingSections[i].offsetMs <= currentTimeMs) {
-        activeSection = timingSections[i];
+      const section = timingSections[i];
+      if (section && section.offsetMs <= currentTimeMs) {
+        activeSection = section;
       } else {
         break;
       }

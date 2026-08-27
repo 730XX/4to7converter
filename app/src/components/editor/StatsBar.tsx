@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Activity, Sparkles } from "lucide-react";
-import type { OsuBeatmap } from "../../../src/core/osu/types";
-import type { PlaybackControls } from "../lib/use-playback";
+import type { OsuBeatmap } from "../../../../src/core/osu/types";
+import type { PlaybackControls } from "../../lib/use-playback";
 import {
   getTimingSections,
   getKiaiIntervals,
   evaluateDynamicRhythm,
-} from "../preview/beat-grid";
+} from "../../preview/beat-grid";
 
 interface StatsBarProps {
   source: OsuBeatmap;
@@ -108,28 +108,7 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", width: "100%" }}>
       {/* 4 Cards de estadísticas */}
-      <section className="stats-bar" style={{ alignItems: "center", textAlign: "center", width: "100%" }}>
-        <div className="stat-card">
-          <span className="stat-label">Notas fuente</span>
-          <span className="stat-value mono">{source.hitObjects.length}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Notas destino</span>
-          <span className="stat-value mono">{converted.hitObjects.length}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Errores</span>
-          <span className={`stat-value mono${issueCounts.errors > 0 ? " is-error" : ""}`}>
-            {issueCounts.errors}
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Advertencias</span>
-          <span className={`stat-value mono${issueCounts.warnings > 0 ? " is-warning" : ""}`}>
-            {issueCounts.warnings}
-          </span>
-        </div>
-      </section>
+      
 
       {/* Cápsula de Metrónomo Auto-ajustable (Fit Content) */}
       <div
@@ -165,6 +144,29 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
           </div>
         </div>
       </div>
+
+      <section className="stats-bar" style={{ alignItems: "center", textAlign: "center", width: "100%" }}>
+        <div className="stat-card">
+          <span className="stat-label">Notas fuente</span>
+          <span className="stat-value mono">{source.hitObjects.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Notas destino</span>
+          <span className="stat-value mono">{converted.hitObjects.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Errores</span>
+          <span className={`stat-value mono${issueCounts.errors > 0 ? " is-error" : ""}`}>
+            {issueCounts.errors}
+          </span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Advertencias</span>
+          <span className={`stat-value mono${issueCounts.warnings > 0 ? " is-warning" : ""}`}>
+            {issueCounts.warnings}
+          </span>
+        </div>
+      </section>
     </div>
   );
 }

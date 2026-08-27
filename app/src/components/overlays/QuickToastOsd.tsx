@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Gauge, Volume2 } from "lucide-react";
-import { SETTINGS_LIMITS } from "../lib/settings";
+import { SETTINGS_LIMITS } from "../../lib/settings";
 
 export interface OsdState {
-  type: "audio" | "speed" | "export";
+  type: "audio" | "speed" | "export" | "generic";
   volume?: number; // 0 - 100
   hitsoundVolume?: number; // 0 - 100
   scrollSpeed?: number; // 10 - 40
   activeParam?: "music" | "hitsound" | "scroll";
   title?: string;
   message?: string;
+  value?: string;
 }
 
 interface QuickToastOsdProps {

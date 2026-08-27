@@ -1,6 +1,6 @@
 import { Check, ChevronDown, FilePlus, Search } from "lucide-react";
-import type { OsuBeatmap } from "../../../src/core/osu/types";
-import type { BeatmapDiffItem } from "../lib/native";
+import type { OsuBeatmap } from "../../../../src/core/osu/types";
+import type { BeatmapDiffItem } from "../../lib/native";
 
 interface BeatmapHeaderCardProps {
   source: OsuBeatmap;

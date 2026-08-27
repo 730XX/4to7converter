@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Gamepad2, RotateCcw, Save, X } from "lucide-react";
-import { DEFAULT_KEYBINDS_7K, formatKeyCode } from "../lib/settings";
+import { DEFAULT_KEYBINDS_7K, formatKeyCode } from "../../lib/settings";
 
 interface KeybindsModalProps {
   isOpen: boolean;

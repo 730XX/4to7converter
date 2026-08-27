@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { OsuBeatmap } from "../../../src/core/osu/types";
-import type { PlaybackControls } from "../lib/use-playback";
+import type { OsuBeatmap } from "../../../../src/core/osu/types";
+import type { PlaybackControls } from "../../lib/use-playback";
 import {
   buildPlayfieldPalette,
   drawPlayfieldFrame,
   type PlayfieldPalette,
-} from "../preview/renderer";
-import { PlayEngine } from "../preview/play-engine";
-import { DEFAULT_KEYBINDS_7K } from "../lib/settings";
-import type { LoadedSkinTextures } from "../preview/skin-manager";
+} from "../../preview/renderer";
+import { PlayEngine } from "../../preview/play-engine";
+import { DEFAULT_KEYBINDS_7K } from "../../lib/settings";
+import type { LoadedSkinTextures } from "../../preview/skin-manager";
 
 interface PlayfieldProps {
   beatmap?: OsuBeatmap | null;

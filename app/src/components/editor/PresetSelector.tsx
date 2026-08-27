@@ -1,8 +1,8 @@
 import { Bookmark, BookmarkPlus, ChevronDown, Check, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LanePreset } from "../lib/lane-presets";
-import type { LaneMapState } from "../lib/lane-map-state";
-import { SavePresetModal } from "./SavePresetModal";
+import type { LanePreset } from "../../lib/lane-presets";
+import type { LaneMapState } from "../../lib/lane-map-state";
+import { SavePresetModal } from "../modals/SavePresetModal";
 
 interface PresetSelectorProps {
   presets: readonly LanePreset[];

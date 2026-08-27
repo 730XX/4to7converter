@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ChangeEvent, MouseEvent } from "react";
-import { Download, Eye, Gamepad2, Pause, Play, RotateCcw } from "lucide-react";
-import type { OsuBeatmap } from "../../../src/core/osu/types";
-import type { PlaybackControls } from "../lib/use-playback";
-import { formatTimeMs } from "../preview/preview-math";
+import { Download, Eye, Gamepad2, Pause, Play } from "lucide-react";
+import type { OsuBeatmap } from "../../../../src/core/osu/types";
+import type { PlaybackControls } from "../../lib/use-playback";
+import { formatTimeMs } from "../../preview/preview-math";
+import type { UiTimelineSection } from "../../lib/timeline-sections";
+import { TimelineSectionTrack } from "./TimelineSectionTrack";
 
-/** Velocidades de desplazamiento disponibles, multiplicando el reloj maestro. */
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2];
+/** Velocidades de desplazamiento cíclicas, multiplicando el reloj maestro. */
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2];
 
 interface PlaybackFooterProps {
   playback: PlaybackControls;
@@ -14,6 +16,12 @@ interface PlaybackFooterProps {
   onExport: () => void;
   isPlayMode?: boolean;
   onTogglePlayMode?: () => void;
+  sections?: readonly UiTimelineSection[];
+  activeSectionId?: string | null;
+  onSelectSection?: (sectionId: string) => void;
+  onSplitSection?: () => void;
+  onDeleteSection?: (sectionId: string) => void;
+  onUpdateBoundary?: (leftSectionIndex: number, newCutTimeMs: number) => void;
 }
 
 const DENSITY_BINS = 120; // 120 barras de resolución a lo largo de la canción
@@ -27,6 +35,12 @@ export function PlaybackFooter({
   onExport,
   isPlayMode = false,
   onTogglePlayMode,
+  sections = [],
+  activeSectionId = null,
+  onSelectSection,
+  onSplitSection,
+  onDeleteSection,
+  onUpdateBoundary,
 }: PlaybackFooterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -160,10 +174,15 @@ export function PlaybackFooter({
     }
   }, [densityHistogram, kiaiIntervals, playback.timerTimeMs, playback.durationMs]);
 
+  function handleCycleSpeed(): void {
+    const currentIndex = SPEED_OPTIONS.indexOf(playback.speed);
+    const nextIndex = (currentIndex + 1) % SPEED_OPTIONS.length;
+    const nextSpeed = SPEED_OPTIONS[nextIndex] ?? 1;
+    playback.setSpeed(nextSpeed);
+  }
+
   function handleTimelineClick(event: MouseEvent<HTMLDivElement>): void {
-    if ((event.target as HTMLElement).tagName === "INPUT") {
-      return;
-    }
+    if (playback.durationMs <= 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
@@ -174,86 +193,81 @@ export function PlaybackFooter({
     playback.seekTo(Number(event.target.value));
   }
 
-  function handleSpeedChange(event: ChangeEvent<HTMLSelectElement>): void {
-    playback.setSpeed(Number(event.target.value));
-  }
-
   return (
-    <footer className="app-footer">
-      <button
-        type="button"
-        className="preview-button preview-button--icon"
-        onClick={playback.togglePlay}
-        title={playback.isPlaying ? "Pausar" : "Reproducir"}
-      >
-        {playback.isPlaying ? <Pause size={16} /> : <Play size={16} />}
-      </button>
-      <button
-        type="button"
-        className="preview-button preview-button--icon"
-        onClick={playback.restart}
-        title="Reiniciar reproducción"
-      >
-        <RotateCcw size={16} />
-        <span>Reiniciar</span>
-      </button>
-
-      <span className="preview-timer mono">
-        {formatTimeMs(playback.timerTimeMs)} / {formatTimeMs(playback.durationMs)}
-      </span>
-
-      {/* Contenedor interactivo del Timeline con Density Spectrum */}
-      <div
-        className="timeline-density-wrapper"
-        onClick={handleTimelineClick}
-      >
-        <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
-        <input
-          className="preview-slider timeline-density-slider"
-          type="range"
-          min={0}
-          max={Math.max(playback.durationMs, 1)}
-          step={1}
-          value={Math.min(playback.timerTimeMs, playback.durationMs)}
-          onChange={handleSeek}
-          onPointerUp={(e) => (e.target as HTMLElement).blur()}
-          aria-label="Posición de reproducción"
+    <footer className="playback-footer-wrapper">
+      {beatmap && onSelectSection && onSplitSection && onDeleteSection && (
+        <TimelineSectionTrack
+          sections={sections}
+          activeSectionId={activeSectionId}
+          durationMs={playback.durationMs > 0 ? playback.durationMs : Math.max(beatmap.hitObjects.slice(-1)[0]?.timeMs ?? 1000, 1000)}
+          currentTimeMs={playback.timerTimeMs}
+          onSelectSection={onSelectSection}
+          onSplitAtCurrentTime={onSplitSection}
+          onDeleteSection={onDeleteSection}
+          onSeek={(timeMs) => playback.seekTo(timeMs)}
+          onUpdateBoundary={onUpdateBoundary}
         />
-      </div>
-
-      <label className="preview-speed">
-        <span>Velocidad</span>
-        <select
-          value={playback.speed}
-          onChange={(e) => {
-            e.target.blur();
-            handleSpeedChange(e);
-          }}
-        >
-          {SPEED_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}×
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {onTogglePlayMode && (
-        <button
-          type="button"
-          className={`preview-button preview-button--play-mode${isPlayMode ? " is-active" : ""}`}
-          onClick={onTogglePlayMode}
-          title={isPlayMode ? "Cambiar a Modo Preview (Autoplay)" : "Testear mapa (jugable)"}
-        >
-          {isPlayMode ? <Gamepad2 size={16} /> : <Eye size={16} />}
-          <span>{isPlayMode ? "Modo Play" : "Test"}</span>
-        </button>
       )}
 
-      <button type="button" className="primary-button primary-button--icon" onClick={onExport}>
-        <Download size={18} />
-        <span>Exportar 7k (.osu)</span>
-      </button>
+      <div className="playback-footer">
+        <button
+          type="button"
+          className="preview-button preview-button--icon"
+          onClick={playback.togglePlay}
+          title={playback.isPlaying ? "Pausar" : "Reproducir"}
+        >
+          {playback.isPlaying ? <Pause size={16} /> : <Play size={16} />}
+        </button>
+
+        <span className="preview-timer mono">
+          {formatTimeMs(playback.timerTimeMs)} / {formatTimeMs(playback.durationMs)}
+        </span>
+
+        {/* Contenedor interactivo del Timeline con Density Spectrum */}
+        <div
+          className="timeline-density-wrapper"
+          onClick={handleTimelineClick}
+        >
+          <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
+          <input
+            className="preview-slider timeline-density-slider"
+            type="range"
+            min={0}
+            max={Math.max(playback.durationMs, 1)}
+            step={1}
+            value={Math.min(playback.timerTimeMs, playback.durationMs)}
+            onChange={handleSeek}
+            onPointerUp={(e) => (e.target as HTMLElement).blur()}
+            aria-label="Posición de reproducción"
+          />
+        </div>
+
+        <button
+          type="button"
+          className="preview-button preview-speed-btn mono"
+          onClick={handleCycleSpeed}
+          title="Cambiar velocidad de reproducción (clic para ciclar)"
+        >
+          {playback.speed}×
+        </button>
+
+        {onTogglePlayMode && (
+          <button
+            type="button"
+            className={`preview-button preview-button--play-mode${isPlayMode ? " is-active" : ""}`}
+            onClick={onTogglePlayMode}
+            title={isPlayMode ? "Cambiar a Modo Preview (Autoplay)" : "Testear mapa (jugable)"}
+          >
+            {isPlayMode ? <Gamepad2 size={16} /> : <Eye size={16} />}
+            <span>{isPlayMode ? "Modo Play" : "Test"}</span>
+          </button>
+        )}
+
+        <button type="button" className="primary-button primary-button--icon" onClick={onExport} title="Exportar beatmap 7k (.osu)">
+          <Download size={16} />
+          <span>Exportar</span>
+        </button>
+      </div>
     </footer>
   );
 }

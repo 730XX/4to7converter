@@ -8,9 +8,10 @@ import {
   hasTargetColumn,
   toggleTargetColumn,
   type LaneMapState,
-} from "../lib/lane-map-state";
-import type { LanePreset } from "../lib/lane-presets";
+} from "../../lib/lane-map-state";
+import type { LanePreset } from "../../lib/lane-presets";
 import { PresetSelector } from "./PresetSelector";
+import type { UiTimelineSection } from "../../lib/timeline-sections";
 
 interface LaneMapperProps {
   state: LaneMapState;
@@ -21,6 +22,8 @@ interface LaneMapperProps {
   onSavePreset?: (name: string) => void;
   onDeletePreset?: (id: string) => void;
   onApplyPreset?: (preset: LanePreset) => void;
+  activeSection?: UiTimelineSection | null;
+  totalSectionsCount?: number;
 }
 
 /**
@@ -35,6 +38,8 @@ export function LaneMapper({
   onSavePreset,
   onDeletePreset,
   onApplyPreset,
+  activeSection,
+  totalSectionsCount = 1,
 }: LaneMapperProps) {
   const targetColumnCounts = useMemo(
     () => getTargetColumnCounts(state, targetKeyCount),
@@ -67,7 +72,25 @@ export function LaneMapper({
   return (
     <section className="lane-mapper" style={gridStyle}>
       <div className="lane-mapper-header">
-        <h2>Estilo de converción</h2>
+        <div className="lane-mapper-title-wrap">
+          <h2>Estilo de converción</h2>
+          {totalSectionsCount > 1 && activeSection && (
+            <span
+              className="lane-section-badge"
+              style={{
+                borderColor: activeSection.color ?? "var(--color-accent)",
+                color: activeSection.color ?? "var(--color-accent-strong)",
+              }}
+              title={`Editando patrón para ${activeSection.name}`}
+            >
+              <span
+                className="lane-section-badge-dot"
+                style={{ backgroundColor: activeSection.color ?? "var(--color-accent)" }}
+              />
+              {activeSection.name}
+            </span>
+          )}
+        </div>
         <div className="lane-mapper-actions">
           <button
             type="button"
