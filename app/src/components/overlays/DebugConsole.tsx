@@ -6,6 +6,72 @@ import { appLogger, type LogEntry } from "../../lib/logger";
  * Consola de Debugging integrada directamente en la aplicación.
  * Permite monitorear llamadas nativas de Rust, detección de osu!, errores y eventos en tiempo real.
  */
+function useFps(enabled: boolean) {
+  const [fpsData, setFpsData] = useState({ fps: 60, avgFps: 60, frameTime: 16.6, minFps: 60 });
+  const frameCountRef = useRef(0);
+  const totalFramesRef = useRef(0);
+  const startTimeRef = useRef(performance.now());
+  const lastTimeRef = useRef(performance.now());
+  const lastUpdateRef = useRef(performance.now());
+  const frameTimesRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let animId: number;
+    const loop = (now: number) => {
+      const delta = now - lastTimeRef.current;
+      lastTimeRef.current = now;
+      frameCountRef.current++;
+      totalFramesRef.current++;
+      if (delta > 0) {
+        frameTimesRef.current.push(delta);
+        if (frameTimesRef.current.length > 60) frameTimesRef.current.shift();
+      }
+
+      // Actualizar métricas cada 250ms para no saturar renders
+      if (now - lastUpdateRef.current >= 250) {
+        const elapsed = (now - lastUpdateRef.current) / 1000;
+        const currentFps = Math.round(frameCountRef.current / elapsed);
+        const totalElapsed = (now - startTimeRef.current) / 1000;
+        const avgFps = totalElapsed > 0.5 ? Math.round(totalFramesRef.current / totalElapsed) : currentFps;
+
+        const avgFrameTime =
+          frameTimesRef.current.length > 0
+            ? frameTimesRef.current.reduce((a, b) => a + b, 0) / frameTimesRef.current.length
+            : 16.6;
+        const worstDelta = Math.max(...frameTimesRef.current, 16.6);
+        const minFps = Math.max(1, Math.round(1000 / worstDelta));
+
+        setFpsData({
+          fps: currentFps,
+          avgFps,
+          frameTime: Number(avgFrameTime.toFixed(1)),
+          minFps: Math.min(currentFps, minFps),
+        });
+
+        frameCountRef.current = 0;
+        lastUpdateRef.current = now;
+      }
+
+      animId = requestAnimationFrame(loop);
+    };
+
+    const now = performance.now();
+    startTimeRef.current = now;
+    lastTimeRef.current = now;
+    lastUpdateRef.current = now;
+    frameCountRef.current = 0;
+    totalFramesRef.current = 0;
+    frameTimesRef.current = [];
+    animId = requestAnimationFrame(loop);
+
+    return () => cancelAnimationFrame(animId);
+  }, [enabled]);
+
+  return fpsData;
+}
+
 export function DebugConsole() {
   const [isVisible, setIsVisible] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -13,6 +79,9 @@ export function DebugConsole() {
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState<string>("");
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Monitoreo de FPS solo cuando el modo debug está activo
+  const { fps, avgFps, frameTime, minFps } = useFps(isVisible);
 
   // Escuchar atajo secreto Ctrl + Shift + D para habilitar/deshabilitar la consola
   useEffect(() => {
@@ -64,6 +133,9 @@ export function DebugConsole() {
     return null;
   }
 
+  const fpsColor =
+    fps >= 55 ? "#22c55e" : fps >= 30 ? "#eab308" : "#ef4444";
+
   return (
     <div className={`debug-console-wrapper${isOpen ? " is-open" : ""}`}>
       {/* Botón flotante para abrir/cerrar consola */}
@@ -71,10 +143,35 @@ export function DebugConsole() {
         type="button"
         className="debug-console-toggle"
         onClick={() => setIsOpen((prev) => !prev)}
-        title="Abrir consola de debug in-app"
+        title="Abrir consola de debug in-app (Ctrl + Shift + D para ocultar)"
       >
-        <Bug size={14} />
-        <span>Debug Logs ({logs.length})</span>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            fontFamily: "monospace",
+            fontWeight: 800,
+            fontSize: "0.82rem",
+            color: fpsColor,
+          }}
+        >
+          <span
+            style={{
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              backgroundColor: fpsColor,
+              boxShadow: `0 0 6px ${fpsColor}`,
+            }}
+          />
+          {fps} FPS <span style={{ opacity: 0.7, fontWeight: 500, fontSize: "0.72rem" }}>(avg {avgFps})</span>
+        </span>
+        <span style={{ opacity: 0.4 }}>|</span>
+        <span style={{ fontSize: "0.72rem", opacity: 0.85, fontFamily: "monospace" }}>{frameTime}ms</span>
+        <span style={{ opacity: 0.4 }}>|</span>
+        <Bug size={13} />
+        <span>Logs ({logs.length})</span>
         {isOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
       </button>
 
@@ -84,7 +181,18 @@ export function DebugConsole() {
           <header className="debug-console-header">
             <div className="debug-console-title">
               <Terminal size={15} />
-              <span>Consola de Debug Integrada</span>
+              <span>Consola de Debug</span>
+              <span
+                className="debug-badge mono"
+                style={{
+                  color: fpsColor,
+                  borderColor: `${fpsColor}44`,
+                  background: `${fpsColor}15`,
+                  fontWeight: 700,
+                }}
+              >
+                {fps} FPS • Avg: {avgFps} • Min: {minFps} • {frameTime}ms
+              </span>
               <span className="debug-badge mono">{filteredLogs.length} eventos</span>
             </div>
 

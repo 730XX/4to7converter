@@ -79,6 +79,7 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
   const hitsoundsEnabledRef = useRef(hitsoundsEnabled);
   const hitsoundVolumeRef = useRef(hitsoundVolume);
   const hitsoundLastCheckedRef = useRef(0);
+  const nextHitsoundIndexRef = useRef(0);
   const isPlayModeRef = useRef(isPlayMode);
   const keybindsRef = useRef(keybinds);
   const rafIdRef = useRef<number | null>(null);
@@ -149,6 +150,7 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         stopPlayback();
         currentTimeMsRef.current = 0;
         hitsoundLastCheckedRef.current = 0;
+        nextHitsoundIndexRef.current = 0;
         setTimerTimeMs(0);
       })
       .catch(() => {
@@ -160,6 +162,7 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
         stopPlayback();
         currentTimeMsRef.current = 0;
         hitsoundLastCheckedRef.current = 0;
+        nextHitsoundIndexRef.current = 0;
         setTimerTimeMs(0);
       });
     return () => {
@@ -246,14 +249,23 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
           hitDelta < 500
         ) {
           let hitCount = 0;
-          for (const hitObject of beatmapRef.current.hitObjects) {
-            if (
-              hitObject.timeMs > hitsoundLastCheckedRef.current &&
-              hitObject.timeMs <= currentTimeMsRef.current
-            ) {
+          const currentHitObjects = beatmapRef.current.hitObjects;
+          
+          while (nextHitsoundIndexRef.current < currentHitObjects.length) {
+            const hitObject = currentHitObjects[nextHitsoundIndexRef.current];
+            if (!hitObject) break;
+
+            if (hitObject.timeMs > currentTimeMsRef.current) {
+              break; // Aún no es tiempo de este hitsound
+            }
+
+            if (hitObject.timeMs > hitsoundLastCheckedRef.current) {
               hitCount++;
             }
+            
+            nextHitsoundIndexRef.current++;
           }
+
           if (hitCount > 0) {
             const baseVol = hitsoundVolumeRef.current / 100;
             const chordMultiplier = 1 + Math.min(hitCount - 1, 6) * 0.30;
@@ -329,6 +341,17 @@ export function usePlayback(options: UsePlaybackOptions): PlaybackControls {
     const clamped = Math.max(0, Math.min(timeMs, durationMsRef.current));
     currentTimeMsRef.current = clamped;
     hitsoundLastCheckedRef.current = clamped;
+
+    // Resetear el índice de hitsounds para buscar desde el principio
+    // Se puede optimizar con binary search, pero un barrido rápido al seek no afecta el frame rate constante
+    let newIndex = 0;
+    while (newIndex < beatmapRef.current.hitObjects.length) {
+      const obj = beatmapRef.current.hitObjects[newIndex];
+      if (obj && obj.timeMs > clamped) break;
+      newIndex++;
+    }
+    nextHitsoundIndexRef.current = newIndex;
+
     lastFrameNowRef.current = performance.now();
     audioRef.current?.seek(clamped);
     setTimerTimeMs(Math.round(clamped));

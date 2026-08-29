@@ -17,11 +17,13 @@ import { Playfield } from "./components/playfield/Playfield";
 import { QuickSearchModal } from "./components/modals/QuickSearchModal";
 import { QuickDiffSwitcherModal } from "./components/modals/QuickDiffSwitcherModal";
 import { QuickToastOsd, type OsdState } from "./components/overlays/QuickToastOsd";
+import { FullScreenDropOverlay } from "./components/overlays/FullScreenDropOverlay";
 import { SettingsDrawer } from "./components/overlays/SettingsDrawer";
 import { KeybindsModal } from "./components/modals/KeybindsModal";
 import { StatsBar } from "./components/editor/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
+import { recordConversionMetric } from "./lib/session-stats";
 import { appLogger } from "./lib/logger";
 import type { PlaybackControls } from "./lib/use-playback";
 import {
@@ -427,19 +429,66 @@ export default function App() {
       }
 
       const { content, audioPath, backgroundPath } = await loadBeatmapWithAudio(path);
-      const parsed = parseOsuFile(content);
+      let parsed = parseOsuFile(content);
+      let targetPath = path;
+      let targetContent = content;
+      let targetAudioPath = audioPath;
+      let targetBackgroundPath = backgroundPath;
+
+      // Obtener dificultades hermanas y filtrar ESTRICTAMENTE solo las de 4K
+      let sibling4kDiffs: BeatmapDiffItem[] = [];
+      try {
+        const allDiffs = await listBeatmapDifficulties(path);
+        sibling4kDiffs = allDiffs.filter((d) => d.key_count === 4);
+      } catch (err) {
+        console.error("Error al listar dificultades:", err);
+      }
+
+      // Si el mapa seleccionado no es 4K
+      if (parsed.keyCount !== 4) {
+        if (sibling4kDiffs.length > 0) {
+          const fallback4k = sibling4kDiffs[0];
+          if (fallback4k) {
+            targetPath = fallback4k.path;
+            const loaded = await loadBeatmapWithAudio(targetPath);
+            targetContent = loaded.content;
+            targetAudioPath = loaded.audioPath;
+            targetBackgroundPath = loaded.backgroundPath;
+            parsed = parseOsuFile(targetContent);
+
+            triggerOsd({
+              type: "generic",
+              title: "Dificultad 4K Seleccionada",
+              message: `Se cargó "${parsed.version || fallback4k.version}" (4K)`,
+            });
+          }
+        } else {
+          triggerOsd({
+            type: "generic",
+            title: "Modo no soportado",
+            message: `El mapa es ${parsed.keyCount}K. Por ahora solo puedes cargar mapas 4K.`,
+          });
+          setLoadError({
+            message: `El mapa seleccionado es de ${parsed.keyCount}K. Por el momento solo puedes cargar mapas 4K para convertir a 7K.`,
+            code: 0,
+          });
+          return;
+        }
+      }
+
       setSource(parsed);
-      setFileName(path.split(/[\\/]/).pop() ?? path);
-      setSourcePath(path);
+      setFileName(targetPath.split(/[\\/]/).pop() ?? targetPath);
+      setSourcePath(targetPath);
+      setDifficulties(sibling4kDiffs);
       setLoadError(null);
-      setAudioUrl(audioPath === null ? null : toAudioUrl(audioPath));
-      setBackgroundUrl(backgroundPath === null ? null : toAssetUrl(backgroundPath));
+      setAudioUrl(targetAudioPath === null ? null : toAudioUrl(targetAudioPath));
+      setBackgroundUrl(targetBackgroundPath === null ? null : toAssetUrl(targetBackgroundPath));
       setIsFileModalOpen(false);
       setIsQuickSearchOpen(false);
 
       // Guardar en el historial de mapas recientes
       saveRecentBeatmap({
-        path,
+        path: targetPath,
         title: parsed.title || "Unknown Title",
         artist: parsed.artist || "Unknown Artist",
         difficulty: parsed.version || "Normal",
@@ -447,24 +496,13 @@ export default function App() {
         bpm: parsed.timingPoints[0]?.beatLength
           ? Math.round(60000 / parsed.timingPoints[0].beatLength)
           : 120,
-        backgroundPath: backgroundPath ?? null,
+        backgroundPath: targetBackgroundPath ?? null,
       });
 
       // Inicializar una sección inicial para toda la canción
       const initialSecs = createInitialSection(Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000), laneMapState);
       setSections(initialSecs);
       setActiveSectionId(initialSecs[0]?.id ?? null);
-
-      // Cargar lista de todas las dificultades del mapset
-      listBeatmapDifficulties(path)
-        .then((diffs) => {
-          if (diffs.length > 0) {
-            setDifficulties(diffs);
-          }
-        })
-        .catch((err) => {
-          console.error("Error al listar dificultades:", err);
-        });
     } catch (error) {
       console.error("Error al cargar beatmap desde path:", error);
       if (error instanceof OsuParseError || error instanceof ConversionError) {
@@ -489,6 +527,20 @@ export default function App() {
 
       const content = await file.text();
       const parsed = parseOsuFile(content);
+
+      if (parsed.keyCount !== 4) {
+        triggerOsd({
+          type: "generic",
+          title: "Modo no soportado",
+          message: `El archivo es ${parsed.keyCount}K. Solo se admiten mapas 4K.`,
+        });
+        setLoadError({
+          message: `El archivo seleccionado es de ${parsed.keyCount}K. Por el momento solo puedes cargar mapas 4K para convertir a 7K.`,
+          code: 0,
+        });
+        return;
+      }
+
       setSource(parsed);
       setFileName(file.name);
       setSourcePath(null);
@@ -758,6 +810,10 @@ export default function App() {
         const newPath = `${dir}\\${newFileName}`;
 
         await saveBeatmap(newPath, content);
+        recordConversionMetric(
+          source?.title || fileName,
+          converted?.hitObjects.length || 0,
+        );
         appLogger.info(`[Export] ¡Mapa 7K guardado exitosamente en: ${newPath}`);
         triggerOsd({
           type: "export",
@@ -818,6 +874,18 @@ export default function App() {
           onPathSelected={(path) => void handlePathSelected(path)}
           onFileSelected={(file) => void handleFileSelected(file)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          settings={settings}
+        />
+        <FullScreenDropOverlay
+          onPathDropped={(path) => void handlePathSelected(path)}
+          onFileDropped={(file) => void handleFileSelected(file)}
+        />
+        <QuickToastOsd osd={osd} />
+        <SettingsDrawer
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          settings={settings}
+          onUpdateSettings={setSettings}
         />
         <DebugConsole />
         <QuickSearchModal
@@ -977,6 +1045,11 @@ export default function App() {
 
       <QuickToastOsd osd={osd} />
       <DebugConsole />
+
+      <FullScreenDropOverlay
+        onPathDropped={(path) => void handlePathSelected(path)}
+        onFileDropped={(file) => void handleFileSelected(file)}
+      />
 
       {/* Modal de selección/drop de nuevo archivo sin perder el estado previo si se cancela */}
       {isFileModalOpen && (

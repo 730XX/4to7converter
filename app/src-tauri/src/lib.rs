@@ -627,6 +627,57 @@ async fn search_beatmaps(
     .map_err(|e| e.to_string())?
 }
 
+#[derive(Serialize)]
+struct LibraryStats {
+    mapsets_count: usize,
+    songs_dir: Option<String>,
+    is_indexed: bool,
+}
+
+/// Devuelve las estadísticas actuales de la librería Songs indexada en memoria.
+#[tauri::command]
+fn get_library_stats() -> Result<LibraryStats, String> {
+    let songs_dir = resolve_songs_dir(&None).map(|p| p.to_string_lossy().into_owned());
+    let guard = SEARCH_INDEX.lock().map_err(|e| e.to_string())?;
+    let (mapsets_count, is_indexed) = match guard.as_ref() {
+        Some(idx) => (idx.len(), true),
+        None => (0, false),
+    };
+    Ok(LibraryStats {
+        mapsets_count,
+        songs_dir,
+        is_indexed,
+    })
+}
+
+/// Re-escanea la carpeta Songs en paralelo con Rayon y actualiza el índice en memoria.
+#[tauri::command]
+async fn rescan_songs_library() -> Result<LibraryStats, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let songs_dir = resolve_songs_dir(&None);
+        let songs_dir_str = songs_dir.as_ref().map(|p| p.to_string_lossy().into_owned());
+
+        let count = if let Some(ref dir) = songs_dir {
+            let new_index = build_search_index(dir);
+            let c = new_index.len();
+            if let Ok(mut guard) = SEARCH_INDEX.lock() {
+                *guard = Some(new_index);
+            }
+            c
+        } else {
+            0
+        };
+
+        Ok(LibraryStats {
+            mapsets_count: count,
+            songs_dir: songs_dir_str,
+            is_indexed: count > 0,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Invalida el caché del índice de búsqueda para forzar un rebuild en la próxima consulta.
 #[tauri::command]
 fn invalidate_search_index() {
@@ -783,6 +834,8 @@ pub fn run() {
             list_beatmap_difficulties,
             search_beatmaps,
             invalidate_search_index,
+            get_library_stats,
+            rescan_songs_library,
             list_osu_skins,
             load_osu_skin_config
         ])

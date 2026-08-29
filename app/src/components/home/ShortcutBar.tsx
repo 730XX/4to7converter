@@ -1,18 +1,23 @@
+import packageJson from "../../../package.json";
+
 interface ShortcutItem {
   keys: string[];
   label: string;
 }
 
 const SHORTCUTS: ShortcutItem[] = [
-  { keys: ["Ctrl", "P"], label: "Búsqueda instantánea" },
+  { keys: ["Ctrl", "P"], label: "Búsqueda de mapas" },
   { keys: ["Ctrl", "Tab"], label: "Selector de dificultades" },
   { keys: ["Ctrl", "B"], label: "Dividir sección" },
-  { keys: ["Tab"], label: "Modo Play / Autoplay" },
+  { keys: ["Tab"], label: "mostrar 4-7k / Autoplay" },
 ];
 
 export function ShortcutBar() {
   return (
     <footer className="home-shortcut-bar">
+      {/* Versión leída directamente de package.json */}
+      <span className="home-footer-version mono">730XX - v{packageJson.version}</span>
+
       <div className="home-shortcut-bar-inner">
         {SHORTCUTS.map((s) => (
           <div key={s.keys.join("+")} className="home-shortcut-item">

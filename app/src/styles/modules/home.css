@@ -1,27 +1,30 @@
 /* ==========================================================================
-   HOMESCREEN — CLEAN / MATTE DARK DESIGN (NO GLOWS, NO GRADIENTS)
+   HOMESCREEN — MODERN 70/30 ASYMMETRIC LAYOUT WITH BMS BGA BACKDROP
    ========================================================================== */
 
 .glass-panel {
-  background: #11151f;
-  border: 1px solid #1e2638;
+  background: rgba(14, 18, 26, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .home-screen-wrapper {
   position: relative;
   min-height: 100vh;
+  height: 100vh;
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 24px 70px 24px;
-  background-color: #080b10;
-  overflow-y: auto;
+  padding: 16px 28px 48px 28px;
+  background-color: #06080d;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
 /* ==========================================================================
-   BGA BACKGROUND (BMS 24-FRAME LOOP PLAYER)
+   BGA BACKGROUND (BMS MULTI-SCENE ROTATING PLAYER)
    ========================================================================== */
 
 .home-bga-container {
@@ -110,76 +113,70 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1100px;
+  max-width: 1360px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
-/* 1. BRAND HEADER */
-.home-brand-header {
+.home-title-group {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  width: 100%;
+  flex-wrap: wrap;
 }
 
-.home-brand-badge {
+.home-logo-wrap {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  background: #11151f;
-  border: 1px solid #1e2638;
+  gap: 10px;
 }
 
-.home-brand-logo-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.home-logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1e2638;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   color: #38bdf8;
 }
 
-.home-brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.home-brand-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-brand-name {
-  font-size: 0.92rem;
-  font-weight: 700;
+.home-brand-heading {
+  font-size:3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: #ffffff;
+  margin: 0;
+  line-height: 1;
 }
 
-.home-brand-version {
+.home-brand-sub {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.home-version-tag {
   font-size: 0.68rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #1a2233;
-  border: 1px solid #27334d;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #94a3b8;
 }
 
-.home-brand-status {
+.home-status-inline {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.72rem;
-  color: #64748b;
-  margin-top: 2px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .status-ping-dot {
@@ -196,8 +193,103 @@
   background: #10b981;
 }
 
-.ping-wave {
-  display: none;
+.home-engine-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Acciones y Badge Inteligente de osu! */
+.home-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-osu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: rgba(14, 18, 26, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.home-osu-badge.is-detected {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+.home-osu-badge.is-idle {
+  color: #64748b;
+}
+
+.home-osu-badge-icon {
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+
+.home-osu-badge.is-detected .home-osu-badge-icon {
+  color: #f43f5e;
+}
+
+.home-osu-load-trigger {
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.75rem;
+  max-width: 280px;
+}
+
+.home-osu-load-label {
+  color: #f43f5e;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.home-osu-song-name {
+  color: #e2e8f0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-osu-load-trigger:hover .home-osu-song-name {
+  text-decoration: underline;
+  color: #38bdf8;
+}
+
+.home-osu-idle-text {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.home-osu-rescan-btn {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.home-osu-rescan-btn:hover:not(:disabled) {
+  color: #38bdf8;
 }
 
 .home-settings-btn,
@@ -205,20 +297,21 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 8px;
   cursor: pointer;
   color: #94a3b8;
-  background: #11151f;
-  border: 1px solid #1e2638;
+  background: rgba(14, 18, 26, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .home-settings-btn:hover,
 .home-close-btn:hover {
   color: #ffffff;
-  background: #161c2b;
-  border-color: #27334d;
+  background: rgba(22, 28, 43, 0.85);
+  border-color: rgba(56, 189, 248, 0.3);
 }
 
 .home-settings-icon {
@@ -230,239 +323,66 @@
 }
 
 .home-settings-shortcut {
-  font-size: 0.75rem;
-}
-
-/* 2. OSU PROCESS CARD */
-.osu-process-card {
-  position: relative;
-  border-radius: 10px;
-  padding: 12px 16px;
-  background: #11151f;
-  border: 1px solid #1e2638;
-}
-
-.osu-process-backdrop {
-  display: none;
-}
-
-.osu-process-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.osu-process-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-}
-
-.osu-process-icon-box {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: #161c2b;
-  border: 1px solid #232c40;
-  color: #64748b;
-}
-
-.osu-process-icon-box.is-detected {
-  background: #1a1622;
-  color: #f43f5e;
-  border-color: #3b202c;
-}
-
-.osu-process-info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.osu-process-status-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
-}
-
-.osu-process-title {
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 1px;
-}
-
-.osu-process-meta {
   font-size: 0.72rem;
-  color: #94a3b8;
 }
 
-.osu-process-idle-hint {
-  font-size: 0.82rem;
-  color: #94a3b8;
-  margin-top: 1px;
-}
 
-.osu-process-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* ==========================================================================
+   1. BRAND TOP BAR (TIPOGRAFÍA MODERNA LIBRE)
+   ========================================================================== */
 
-.osu-process-load-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #ffffff;
-  background: #f43f5e;
-  border: 1px solid #f43f5e;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.osu-process-load-btn:hover {
-  background: #e11d48;
-}
-
-.osu-process-refresh-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #161c2b;
-  border: 1px solid #232c40;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.osu-process-refresh-btn:hover:not(:disabled) {
-  color: #ffffff;
-  border-color: #38bdf8;
-}
-
-/* 3. DROP ZONE FLAT & COMPACT */
-.home-dropzone {
-  position: relative;
-  border-radius: 10px;
-  background: #11151f;
-  border: 1px dashed #27334d;
-  padding: 16px 20px;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.home-dropzone:hover {
-  border-color: #38bdf8;
-  background: #131926;
-}
-
-.home-dropzone.is-dragging {
-  border-color: #38bdf8;
-  background: #151f30;
-}
-
-.home-dropzone-glow {
-  display: none;
-}
-
-.home-dropzone-inner {
+.home-top-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: 12px;
 }
 
-.home-dropzone-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
+/* ==========================================================================
+   2. MAIN ASYMMETRIC SPLIT LAYOUT (70% / 30%)
+   ========================================================================== */
+
+.home-main-split {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
   flex: 1;
+  min-height: 0;
 }
 
-.home-dropzone-icon-box {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1a2233;
-  border: 1px solid #27334d;
-  color: #38bdf8;
-  flex-shrink: 0;
+@media (max-width: 960px) {
+  .home-main-split {
+    grid-template-columns: 1fr;
+  }
 }
 
-.home-dropzone-icon-box.is-bouncing {
-  transform: scale(1.05);
-}
+/* ==========================================================================
+   3. COLUMNA IZQUIERDA: MAPAS RECIENTES (70%)
+   ========================================================================== */
 
-.home-dropzone-text-group {
+.home-main-left {
+  min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.home-main-right {
   min-width: 0;
-}
-
-.home-dropzone-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-}
-
-.home-dropzone-desc {
-  font-size: 0.78rem;
-  color: #94a3b8;
-  margin: 2px 0 0 0;
-  line-height: 1.35;
-}
-
-.home-dropzone-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
-.home-dropzone-browse-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #ffffff;
-  background: #1a2233;
-  border: 1px solid #27334d;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.home-dropzone-browse-btn:hover {
-  background: #232c40;
-  border-color: #38bdf8;
-}
-
-/* 4. RECENT BEATMAPS FLAT GRID */
 .home-recents-section {
   width: 100%;
 }
@@ -471,20 +391,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 18px;
+  padding: 0 4px;
 }
 
-.home-recents-header-left {
+.home-recents-title-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.home-recents-icon-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #64748b;
+.home-recents-icon {
+  color: #38bdf8;
 }
 
 .home-recents-title {
@@ -492,180 +410,906 @@
   font-weight: 700;
   color: #ffffff;
   margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.home-recents-pill {
-  font-size: 0.65rem;
+.home-recents-count {
+  font-size: 0.85rem;
   font-weight: 700;
-  color: #94a3b8;
-  background: #161c2b;
-  border: 1px solid #232c40;
-  padding: 1px 6px;
+  color: #38bdf8;
   border-radius: 4px;
 }
 
-.home-recents-hint {
+/* Switchers de Visualización (3x3 / 2 Col / BMS) */
+.home-view-switchers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+
+.home-view-btn {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
   font-size: 0.72rem;
+  font-weight: 600;
   color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-view-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.home-view-btn.is-active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.home-view-btn-bms.is-active {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.14);
 }
 
 .home-recents-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 10px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
-/* Card plana limpia */
-.home-lazer-card,
-.home-recent-card {
-  position: relative;
-  border-radius: 10px;
-  background: #11151f;
-  border: 1px solid #1e2638;
-  padding: 0;
-  overflow: hidden;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  min-height: 76px;
-  display: block;
+.home-recents-grid.is-grid-3 {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.home-recents-grid.is-grid-2 {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+}
+
+/* Scrollbar estilizado para la lista de mapas */
+.home-recents-grid::-webkit-scrollbar {
+  width: 5px;
+}
+
+.home-recents-grid::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.home-recents-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+.home-recents-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.4);
+}
+
+/* ==========================================================================
+   3.2 MODO BMS ARCADE (CARRUSEL INMERSIVO 1 A 1)
+   ========================================================================== */
+
+.home-bms-showcase-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   width: 100%;
 }
 
-.home-lazer-card:hover,
-.home-recent-card:hover {
-  background: #151a27;
-  border-color: #2e3b56;
-}
-
-.home-lazer-card-bg,
-.home-recent-bg-img,
-.home-recent-bg-placeholder,
-.home-lazer-card-mesh,
-.home-lazer-card-gradient,
-.home-recent-overlay {
-  display: none;
-}
-
-.home-lazer-diff-stripe {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-}
-
-.home-lazer-card-body,
-.home-recent-content {
+.home-bms-carousel-card {
   position: relative;
+  border-radius: 12px;
+  background: rgba(10, 14, 22, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  overflow: hidden;
+  min-height: 270px;
+}
+
+@media (max-width: 768px) {
+  .home-bms-carousel-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-bms-jacket-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  background: #080c14;
+  overflow: hidden;
+}
+
+.home-bms-jacket-full {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: auto;
+}
+
+.home-bms-jacket-full-placeholder {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  opacity: 0.4;
+}
+
+.home-bms-jacket-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.25) 0px,
+    rgba(0, 0, 0, 0.25) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events: none;
+}
+
+.home-bms-jacket-vignette {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.home-bms-jacket-badges {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-bms-key-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+
+.home-bms-key-badge.is-4k {
+  color: #38bdf8;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid #38bdf8;
+}
+
+.home-bms-key-badge.is-7k {
+  color: #c084fc;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid #c084fc;
+}
+
+.home-bms-bpm-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.home-bms-info-pane {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.home-bms-meta-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.home-bms-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.home-bms-index-indicator {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #38bdf8;
+}
+
+.home-bms-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-bms-visualizer-canvas {
+  display: block;
+  background: transparent;
+}
+
+.home-bms-audio-toggle {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  font-size: 0.65rem;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.home-bms-audio-toggle:hover {
+  color: #ffffff;
+}
+
+.home-bms-audio-toggle.is-playing {
+  color: #38bdf8;
+}
+
+.home-bms-audio-toggle.is-muted {
+  color: #ef4444;
+}
+
+.home-bms-audio-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.home-bms-audio-toggle.is-playing {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.home-bms-audio-toggle.is-muted {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.home-bms-song-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.home-bms-song-artist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.home-bms-artist {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.home-bms-diff-badge {
+  color: #38bdf8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.home-bms-timestamp {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.home-bms-actions-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px 12px 16px;
-  min-height: 76px;
-  box-sizing: border-box;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.home-lazer-card-main,
-.home-recent-meta {
+.home-bms-load-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-bms-load-btn:hover {
+  background: #38bdf8;
+  color: #06080d;
+}
+
+.home-bms-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-bms-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-bms-nav-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Tira de Miniaturas del Carrusel */
+.home-bms-thumbnails-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px;
+}
+
+.home-bms-thumbnails-strip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.home-bms-thumbnails-strip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.home-bms-thumb-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #090d14;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.home-bms-thumb-item:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  transform: translateY(-2px);
+}
+
+.home-bms-thumb-item.is-selected {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.home-bms-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-bms-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #1e293b;
+}
+
+.home-bms-thumb-idx {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.55rem;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   3.1 ARCADE TRACK CARDS (SONG SELECT BANNER STYLE)
+   ========================================================================== */
+
+.home-track-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: 8px;
+  background: rgba(10, 14, 22, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  user-select: none;
+  min-height: 60px;
+}
+
+.home-track-card:hover {
+  background: rgba(16, 22, 34, 0.85);
+  border-color: rgba(255, 255, 255, 0.18);
+  border-left-color: #38bdf8;
+  /* transform: translateX(4px); */
+}
+
+/* 1. Jacket cuadrado a la izquierda */
+.home-track-jacket-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #090d14;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-track-jacket-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: auto;
+  transition: transform 0.25s ease;
+}
+
+.home-track-card:hover .home-track-jacket-img {
+  transform: scale(1.08);
+}
+
+.home-track-jacket-placeholder {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  opacity: 0.35;
+}
+
+.home-track-jacket-play {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.home-track-card:hover .home-track-jacket-play {
+  opacity: 1;
+}
+
+/* 2. Información del Track */
+.home-track-info {
   min-width: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
-.home-lazer-title,
-.home-recent-song-title {
+.home-track-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-track-title {
   font-size: 0.88rem;
   font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
-.home-lazer-artist,
-.home-recent-song-artist {
+.home-track-artist-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.72rem;
   color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
 }
 
-.home-lazer-badges-row,
-.home-recent-tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+.home-track-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.home-lazer-diff-badge,
-.home-recent-diff-name {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid #27334d;
-  background: #161c2b;
+.home-track-diff-tag {
   color: #38bdf8;
-}
-
-.home-lazer-key-badge,
-.home-recent-key-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #94a3b8;
-  background: #161c2b;
-  border: 1px solid #27334d;
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
-.home-lazer-meta-text,
-.home-recent-time {
-  font-size: 0.68rem;
-  color: #64748b;
-}
-
-.home-lazer-play-trigger,
-.home-recent-play-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1a2233;
-  border: 1px solid #27334d;
-  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.7rem;
   flex-shrink: 0;
 }
 
-.home-lazer-card:hover .home-lazer-play-bubble,
-.home-recent-card:hover .home-recent-play-icon {
-  color: #ffffff;
-  background: #38bdf8;
-  border-color: #38bdf8;
+.home-track-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  color: #64748b;
+  margin-top: 1px;
 }
 
-.home-lazer-play-bubble {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+.home-track-time {
+  color: #64748b;
+}
+
+/* 3. Indicadores de Juego a la derecha (Keys & BPM) */
+.home-track-side-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.home-track-key-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.home-track-key-pill.is-4k {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.home-track-key-pill.is-7k {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.3);
+}
+
+.home-track-bpm {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.home-main-right {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* ==========================================================================
+   3.3 BMS MINI PLAYFIELD PREVIEW (CABINA ARCADE 4K AUTOPLAY)
+   ========================================================================== */
+
+.home-bms-mini-playfield-card {
+  position: relative;
+  border-radius: 12px;
+  background: rgba(10, 14, 22, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 420px;
+  height: 100%;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease;
+}
+
+.home-bms-mini-playfield-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.home-bms-mini-canvas {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  display: block;
+}
+
+.home-bms-mini-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.25) 0px,
+    rgba(0, 0, 0, 0.25) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events: none;
+}
+
+.home-bms-mini-loading {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 8, 13, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1a2233;
-  border: 1px solid #27334d;
-  color: #94a3b8;
-  transition: background 0.15s ease, color 0.15s ease;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
-/* 5. SHORTCUT BAR TRANSPARENTE MINIMALISTA (ESTILO CÁPSULA) */
+.home-side-hub {
+  position: relative;
+  border-radius: 14px;
+  background: rgba(14, 18, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home-side-hub:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(18, 24, 36, 0.85);
+}
+
+.home-side-hub.is-dragging {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  transform: scale(1.01);
+}
+
+.home-hub-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.home-hub-drop-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.home-hub-icon-gem {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  transition: transform 0.3s ease;
+}
+
+.home-hub-icon-gem.is-pulsing {
+  transform: scale(1.15) rotate(4deg);
+}
+
+.home-hub-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.home-hub-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.home-hub-desc {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.home-hub-browse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 2px;
+}
+
+.home-hub-browse-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+}
+
+.home-hub-footer-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.home-hub-tip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.home-hub-tip-dot {
+  color: #38bdf8;
+}
+
+/* ==========================================================================
+   4.1 LIVE MONITOR / AUDIO-ENGINE TELEMETRY STRIP (MINIMAL MATE)
+   ========================================================================== */
+
+.home-engine-status-bar {
+  position: relative;
+  border-radius: 10px;
+  background: rgba(14, 18, 26, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px 14px;
+}
+
+.home-engine-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-engine-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.home-engine-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-engine-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+}
+
+.home-engine-rescan-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.home-engine-rescan-btn:hover:not(:disabled) {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.home-engine-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.home-engine-metric-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.metric-val {
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+
+.metric-lbl {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.metric-separator {
+  color: #334155;
+  font-size: 0.65rem;
+}
+
+/* ==========================================================================
+   5. SHORTCUT BAR TRANSPARENTE MINIMALISTA (ESTILO CÁPSULA)
+   ========================================================================== */
+
 .home-shortcut-bar {
   position: fixed;
   bottom: 0;
@@ -673,10 +1317,23 @@
   right: 0;
   width: 100vw;
   z-index: 50;
-  padding: 14px 24px;
+  padding: 12px 24px;
   background: transparent;
   pointer-events: none;
   box-sizing: border-box;
+}
+
+/* Versión plana pegada abajo a la izquierda */
+.home-footer-version {
+  position: absolute;
+  bottom: 8px;
+  left: 14px;
+  font-size: 0.75rem;
+  color: #475569;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.8;
 }
 
 .home-shortcut-bar-inner {

@@ -160,6 +160,37 @@ export async function searchBeatmaps(
   }
 }
 
+export interface LibraryStats {
+  mapsets_count: number;
+  songs_dir: string | null;
+  is_indexed: boolean;
+}
+
+/**
+ * Obtiene las estadísticas de los mapsets indexados en memoria.
+ */
+export async function getLibraryStats(): Promise<LibraryStats> {
+  if (!isTauri()) {
+    return { mapsets_count: 0, songs_dir: null, is_indexed: false };
+  }
+  try {
+    return await invoke<LibraryStats>("get_library_stats");
+  } catch (err) {
+    console.error("Error al obtener estadísticas de librería:", err);
+    return { mapsets_count: 0, songs_dir: null, is_indexed: false };
+  }
+}
+
+/**
+ * Re-escanea la carpeta Songs en paralelo (Rayon) y actualiza el índice en RAM.
+ */
+export async function rescanSongsLibrary(): Promise<LibraryStats> {
+  if (!isTauri()) {
+    return { mapsets_count: 0, songs_dir: null, is_indexed: false };
+  }
+  return await invoke<LibraryStats>("rescan_songs_library");
+}
+
 /**
  * Invalida el caché del índice de búsqueda para forzar un rebuild en la próxima consulta.
  * Usar cuando se sabe que la carpeta Songs cambió (ej: descarga de nuevos mapas).

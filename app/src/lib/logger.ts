@@ -66,7 +66,7 @@ class AppLogger {
       this.logs.shift();
     }
 
-    this.notify();
+    setTimeout(() => this.notify(), 0);
   }
 
   public info(message: string, source: string = "App"): void {
@@ -105,7 +105,7 @@ class AppLogger {
 
   public clear(): void {
     this.logs = [];
-    this.notify();
+    setTimeout(() => this.notify(), 0);
   }
 
   public subscribe(listener: LogListener): () => void {

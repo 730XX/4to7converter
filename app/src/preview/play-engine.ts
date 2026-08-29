@@ -68,6 +68,7 @@ export class PlayEngine {
   private lastHitTime: number = 0;
   private hitNoteIndices: Set<number> = new Set();
   private recentHitErrors: HitErrorEvent[] = [];
+  private nextUnjudgedIndex: number = 0;
   private lastJudgement: JudgementEvent | null = null;
 
   constructor(hitObjects: HitObject[] = [], keyCount: number = 7) {
@@ -88,8 +89,9 @@ export class PlayEngine {
     this.combo = 0;
     this.lastBrokenCombo = 0;
     this.comboBreakTime = 0;
-    this.lastHitTime = 0;
+    this.holdingLnMap.clear();
     this.recentHitErrors = [];
+    this.nextUnjudgedIndex = 0;
     this.lastJudgement = null;
   }
 
@@ -193,9 +195,16 @@ export class PlayEngine {
     const now = performance.now();
     let hitCount = 0;
 
-    for (let i = 0; i < this.hitObjects.length; i++) {
+    for (let i = this.nextUnjudgedIndex; i < this.hitObjects.length; i++) {
       const note = this.hitObjects[i];
-      if (!note || this.judgedMap.has(i)) continue;
+      if (!note) continue;
+
+      // Si la nota está muy en el futuro, podemos detener el bucle
+      if (note.timeMs > currentTimeMs + 100) {
+        break;
+      }
+
+      if (this.judgedMap.has(i)) continue;
 
       // Al alcanzar el tiempo exacto de la nota
       if (currentTimeMs >= note.timeMs) {
@@ -247,6 +256,14 @@ export class PlayEngine {
         this.activeHeldLanes[col] = false;
       }
     }
+
+    // Avanzar el puntero de notas no juzgadas
+    while (
+      this.nextUnjudgedIndex < this.hitObjects.length &&
+      this.judgedMap.has(this.nextUnjudgedIndex)
+    ) {
+      this.nextUnjudgedIndex++;
+    }
   }
 
   /**
@@ -256,17 +273,23 @@ export class PlayEngine {
   public update(currentTimeMs: number, playOffsetMs: number = 0): void {
     const effectiveTime = currentTimeMs - playOffsetMs;
 
-    for (let i = 0; i < this.hitObjects.length; i++) {
+    for (let i = this.nextUnjudgedIndex; i < this.hitObjects.length; i++) {
       const note = this.hitObjects[i];
-      if (!note || this.judgedMap.has(i)) continue;
+      if (!note) continue;
+
+      // Si la nota ni siquiera ha entrado en la ventana de error, no puede ser Miss aún
+      // Detenemos el bucle porque el array está ordenado cronológicamente.
+      if (effectiveTime - note.timeMs <= HIT_WINDOW_MS) {
+        break;
+      }
+
+      if (this.judgedMap.has(i)) continue;
 
       // Si la nota ya pasó la ventana de golpe sin haber sido tocada:
       // Se registra el MISS (se rompe combo), pero NO se oculta prematuramente,
       // permitiendo que la nota continúe su trayectoria hasta salir del canvas.
-      if (effectiveTime - note.timeMs > HIT_WINDOW_MS) {
-        this.judgedMap.set(i, "miss");
-        this.triggerMiss();
-      }
+      this.judgedMap.set(i, "miss");
+      this.triggerMiss();
     }
 
     // Auto-completar LNs cuya cola ya pasó mientras están siendo sostenidas
@@ -276,6 +299,14 @@ export class PlayEngine {
         this.holdingLnMap.delete(lane);
         this.hitNoteIndices.add(noteIndex); // LN completada y soltada/terminada, ocultar
       }
+    }
+
+    // Avanzar el puntero de notas no juzgadas
+    while (
+      this.nextUnjudgedIndex < this.hitObjects.length &&
+      this.judgedMap.has(this.nextUnjudgedIndex)
+    ) {
+      this.nextUnjudgedIndex++;
     }
   }
 

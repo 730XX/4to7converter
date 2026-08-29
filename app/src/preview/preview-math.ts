@@ -98,7 +98,13 @@ export function getVisibleHitObjects(
   const topBound = -VISIBILITY_MARGIN;
   const bottomBound = metrics.height + VISIBILITY_MARGIN;
   const visible: HitObject[] = [];
-  for (const hitObject of hitObjects) {
+
+  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection);
+
+  for (let i = startIndex; i < hitObjects.length; i++) {
+    const hitObject = hitObjects[i];
+    if (!hitObject) continue;
+
     const noteY = getNoteY(
       hitObject.timeMs,
       currentTimeMs,
@@ -116,11 +122,54 @@ export function getVisibleHitObjects(
             speedPxPerMs,
             scrollDirection,
           );
+
     if (isNoteVisible(noteY, endY, topBound, bottomBound)) {
       visible.push(hitObject);
     }
   }
+
   return visible;
+}
+
+/**
+ * Encuentra el índice del primer hit object que podría estar visible o activo.
+ * Usa búsqueda binaria basada en el `timeMs` para optimizar el bucle de renderizado.
+ */
+export function findFirstVisibleNoteIndex(
+  hitObjects: HitObject[],
+  currentTimeMs: number,
+  metrics: PlayfieldMetrics,
+  _scrollDirection: "down" | "up" = "down",
+): number {
+  if (hitObjects.length === 0) return 0;
+
+  // Calculamos el tiempo máximo que una nota podría permanecer en pantalla después de su timeMs.
+  // approachMs es el tiempo que tarda desde la cima hasta la línea de golpe.
+  // Además, dejamos un margen extra de 2000ms para asegurar que las Long Notes o notas retrasadas no desaparezcan.
+  const timeMargin = metrics.approachMs + 2000;
+  const targetTime = currentTimeMs - timeMargin;
+
+  let left = 0;
+  let right = hitObjects.length - 1;
+  let result = 0;
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const note = hitObjects[mid];
+    if (!note) break;
+
+    // Para notas LNs muy largas, podríamos fallar si solo buscamos por timeMs.
+    // Sin embargo, dado que el margen es amplio (2s), cubrimos la mayoría de casos.
+    // En `renderer.ts` las LNs activas se dibujan mediante el set `holdingLnIndices`.
+    if (note.timeMs >= targetTime) {
+      result = mid; // Este podría ser nuestro candidato, buscamos más a la izquierda
+      right = mid - 1;
+    } else {
+      left = mid + 1;
+    }
+  }
+
+  return result;
 }
 
 /**

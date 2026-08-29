@@ -4,32 +4,48 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { detectOsuBeatmap, isTauri, type OsuDetectedBeatmap } from "../../lib/native";
 import { loadRecentBeatmaps, type RecentBeatmapItem } from "../../lib/recent-beatmaps";
 import { BrandHeader } from "./BrandHeader";
-import { OsuProcessCard } from "./OsuProcessCard";
 import { DropZone } from "./DropZone";
 import { RecentBeatmaps } from "./RecentBeatmaps";
 import { ShortcutBar } from "./ShortcutBar";
 import { BgaBackground } from "./BgaBackground";
+import { SessionStatsWidget } from "./SessionStatsWidget";
+import { BmsMiniPlayfieldPreview } from "./BmsMiniPlayfieldPreview";
+
+import type { UserSettings } from "../../lib/settings";
 
 interface HomeScreenProps {
   onPathSelected: (path: string) => void;
   onFileSelected: (file: File) => void;
   onClose?: () => void;
   onOpenSettings?: () => void;
+  settings?: UserSettings;
 }
 
 /**
  * Pantalla de Inicio principal de 4to7 Mania Converter.
- * Orquesta BrandHeader, OsuProcessCard, DropZone, RecentBeatmaps y ShortcutBar.
+ * Orquesta BrandHeader, DropZone/BmsMiniPlayfieldPreview, RecentBeatmaps, SessionStatsWidget y ShortcutBar.
  */
 export function HomeScreen({
   onPathSelected,
   onFileSelected,
   onClose,
   onOpenSettings,
+  settings,
 }: HomeScreenProps) {
   const [detectedMap, setDetectedMap] = useState<OsuDetectedBeatmap | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [recentMaps] = useState<RecentBeatmapItem[]>(() => loadRecentBeatmaps());
+  const [activeBmsState, setActiveBmsState] = useState<{
+    map: RecentBeatmapItem | null;
+    isBmsMode: boolean;
+    audioElement: HTMLAudioElement | null;
+    isPlaying: boolean;
+  }>({
+    map: null,
+    isBmsMode: false,
+    audioElement: null,
+    isPlaying: false,
+  });
   const onPathSelectedRef = useRef(onPathSelected);
 
   useEffect(() => {
@@ -119,32 +135,82 @@ export function HomeScreen({
     }
   }
 
+  const handleBmsStateChange = (
+    map: RecentBeatmapItem | null,
+    isBmsMode: boolean,
+    audioElement: HTMLAudioElement | null,
+    isPlaying: boolean
+  ) => {
+    setActiveBmsState((prev) => {
+      if (
+        prev.map?.path === map?.path &&
+        prev.isBmsMode === isBmsMode &&
+        prev.audioElement === audioElement &&
+        prev.isPlaying === isPlaying
+      ) {
+        return prev;
+      }
+      return { map, isBmsMode, audioElement, isPlaying };
+    });
+  };
+
   return (
     <div className="home-screen-wrapper">
       <BgaBackground />
 
       <div className="home-screen-container">
-        <BrandHeader onOpenSettings={onOpenSettings} onClose={onClose} />
+        {/* Sección Principal Asimétrica 70% / 30% */}
+        <main className="home-main-split">
+          {/* Columna Izquierda: BrandHeader + Mapas Recientes (70%) */}
+          <div className="home-main-left">
+            <BrandHeader
+              detectedMap={detectedMap}
+              isScanning={isScanning}
+              onLoadDetected={(path) => onPathSelectedRef.current(path)}
+              onRescan={() => void handleManualScan()}
+              onOpenSettings={onOpenSettings}
+              onClose={onClose}
+            />
 
-        {isTauri() && (
-          <OsuProcessCard
-            detectedMap={detectedMap}
-            isScanning={isScanning}
-            onLoadDetected={(path) => onPathSelectedRef.current(path)}
-            onRescan={() => void handleManualScan()}
-          />
-        )}
+            <RecentBeatmaps
+              maps={recentMaps}
+              onSelectMap={(path) => onPathSelectedRef.current(path)}
+              onFallbackBrowse={() => void openFilePicker()}
+              volume={settings?.volume ?? 80}
+              onBmsStateChange={handleBmsStateChange}
+            />
+          </div>
 
-        <DropZone
-          onOpenFilePicker={() => void openFilePicker()}
-          onFileSelected={onFileSelected}
-        />
-
-        <RecentBeatmaps
-          maps={recentMaps}
-          onSelectMap={(path) => onPathSelectedRef.current(path)}
-          onFallbackBrowse={() => void openFilePicker()}
-        />
+          {/* Columna Derecha: Hub de Entrada o Mini Playfield BMS + Live Monitor (30%) */}
+          <div className="home-main-right">
+            {activeBmsState.isBmsMode && activeBmsState.map ? (
+              <BmsMiniPlayfieldPreview
+                beatmapPath={activeBmsState.map.path}
+                audioElement={activeBmsState.audioElement}
+                isPlaying={activeBmsState.isPlaying}
+                scrollSpeed={settings?.scrollSpeed ?? 25}
+                scrollDirection={settings?.scrollDirection ?? "down"}
+                hitsoundVolume={settings?.hitsoundVolume ?? 35}
+                hitPositionOffset={settings?.hitPositionOffset ?? 20}
+                receptorOffset={settings?.receptorOffset ?? 0}
+                noteHeight={settings?.noteHeight ?? 16}
+                onOpenBeatmap={() => {
+                  if (activeBmsState.map?.path) {
+                    onPathSelectedRef.current(activeBmsState.map.path);
+                  }
+                }}
+              />
+            ) : (
+              <>
+                <DropZone
+                  onOpenFilePicker={() => void openFilePicker()}
+                  onFileSelected={onFileSelected}
+                />
+                <SessionStatsWidget />
+              </>
+            )}
+          </div>
+        </main>
       </div>
 
       <ShortcutBar />

@@ -4,6 +4,7 @@ import {
   getHoldEndY,
   getNoteY,
   isNoteVisible,
+  findFirstVisibleNoteIndex,
   type PlayfieldMetrics,
 } from "./preview-math";
 import type { HitErrorEvent, JudgementEvent } from "./play-engine";
@@ -140,6 +141,51 @@ export function buildPlayfieldPalette(keyCount: number): PlayfieldPalette {
     background: "#000000",
     separatorColor: "rgba(255, 255, 255, 0.65)",
   };
+}
+
+/**
+ * Cache centralizado para gradientes de Canvas. 
+ * Reduce masivamente la presión del Garbage Collector evitando 
+ * la creación de objetos CanvasGradient en cada frame.
+ */
+const gradientCache = new Map<string, CanvasGradient>();
+
+function getNoteGradient(
+  ctx: CanvasRenderingContext2D,
+  skin: LaneSkinColor,
+  noteHeight: number,
+): CanvasGradient {
+  const key = `note-${skin.top}-${skin.mid}-${skin.bot}-${noteHeight}`;
+  let grad = gradientCache.get(key);
+  if (!grad) {
+    grad = ctx.createLinearGradient(0, 0, 0, noteHeight);
+    grad.addColorStop(0, skin.top);
+    grad.addColorStop(0.35, skin.mid);
+    grad.addColorStop(1, skin.bot);
+    gradientCache.set(key, grad);
+  }
+  return grad;
+}
+
+function getBeamGradient(
+  ctx: CanvasRenderingContext2D,
+  skin: LaneSkinColor,
+  beamHeight: number,
+  intensity: number,
+  scrollDirection: "down" | "up",
+): CanvasGradient {
+  const intensityKey = intensity.toFixed(2);
+  const key = `beam-${skin.top}-${skin.mid}-${beamHeight}-${intensityKey}-${scrollDirection}`;
+  let grad = gradientCache.get(key);
+  if (!grad) {
+    const targetY = scrollDirection === "down" ? -beamHeight : beamHeight;
+    grad = ctx.createLinearGradient(0, 0, 0, targetY);
+    grad.addColorStop(0, hexToRgba(skin.top, intensity * 0.95));
+    grad.addColorStop(0.35, hexToRgba(skin.mid, intensity * 0.5));
+    grad.addColorStop(1, hexToRgba(skin.bot, 0));
+    gradientCache.set(key, grad);
+  }
+  return grad;
 }
 
 import type { LoadedSkinTextures } from "./skin-manager";
@@ -400,28 +446,39 @@ function drawHitBeams(
         const actualWidth = Math.round((col + 1) * columnWidth) - colX;
         const skin = palette.laneSkins[col] ?? WHITE_SKIN;
 
-        const targetY =
-          scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY + BEAM_HEIGHT;
-        const beamGrad = ctx.createLinearGradient(0, hitLineY, 0, targetY);
-
-        beamGrad.addColorStop(0, hexToRgba(skin.top, 0.95));
-        beamGrad.addColorStop(0.35, hexToRgba(skin.mid, 0.5));
-        beamGrad.addColorStop(1, hexToRgba(skin.bot, 0));
-
-        ctx.fillStyle = beamGrad;
+        ctx.save();
+        ctx.translate(colX + 1, hitLineY);
+        
+        ctx.fillStyle = getBeamGradient(ctx, skin, BEAM_HEIGHT, 1.0, scrollDirection);
         ctx.fillRect(
-          colX + 1,
-          scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY,
+          0,
+          scrollDirection === "down" ? -BEAM_HEIGHT : 0,
           actualWidth - 1,
           BEAM_HEIGHT,
         );
+        
+        ctx.restore();
       }
     }
   } else {
     const ATTACK_MS = 50; 
     const DECAY_MS = 250; 
 
-    for (const ho of hitObjects) {
+    // Aquí también usamos búsqueda binaria para no iterar el mapa completo.
+    // La ventana de efecto de luz es muy pequeña (-50ms a +250ms).
+    // Podemos crear una métrica temporal para findFirstVisibleNoteIndex
+    const fakeMetrics = { approachMs: 250, hitLineY, width, height, topPadding: 0 };
+    const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, fakeMetrics, scrollDirection);
+
+    for (let i = startIndex; i < hitObjects.length; i++) {
+      const ho = hitObjects[i];
+      if (!ho) continue;
+      
+      // Si la nota está muy en el futuro, rompemos el bucle
+      if (ho.timeMs > currentTimeMs + DECAY_MS) {
+        break;
+      }
+
       const isHoldActive =
         ho.endTimeMs !== null && currentTimeMs >= ho.timeMs && currentTimeMs <= ho.endTimeMs;
 
@@ -447,21 +504,18 @@ function drawHitBeams(
         }
 
         if (intensity > 0.01) {
-          const targetY =
-            scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY + BEAM_HEIGHT;
-          const beamGrad = ctx.createLinearGradient(0, hitLineY, 0, targetY);
-
-          beamGrad.addColorStop(0, hexToRgba(skin.top, intensity * 0.95));
-          beamGrad.addColorStop(0.35, hexToRgba(skin.mid, intensity * 0.5));
-          beamGrad.addColorStop(1, hexToRgba(skin.bot, 0));
-
-          ctx.fillStyle = beamGrad;
+          ctx.save();
+          ctx.translate(colX + 1, hitLineY);
+          
+          ctx.fillStyle = getBeamGradient(ctx, skin, BEAM_HEIGHT, intensity, scrollDirection);
           ctx.fillRect(
-            colX + 1,
-            scrollDirection === "down" ? hitLineY - BEAM_HEIGHT : hitLineY,
+            0,
+            scrollDirection === "down" ? -BEAM_HEIGHT : 0,
             actualWidth - 1,
             BEAM_HEIGHT,
           );
+          
+          ctx.restore();
         }
       }
     }
@@ -549,7 +603,9 @@ function drawNotes(
   const topBound = 0;
   const bottomBound = metrics.height;
 
-  for (let i = 0; i < hitObjects.length; i++) {
+  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection);
+
+  for (let i = startIndex; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
     if (!hitObject) {
       continue;
@@ -835,7 +891,7 @@ function drawJudgement(
   height: number,
   judgement: JudgementEvent,
   comboPositionPercent: number = 55,
-  customSkinTextures: LoadedSkinTextures | null = null,
+  _customSkinTextures: LoadedSkinTextures | null = null,
 ): void {
   const now = performance.now();
   const elapsed = now - judgement.timestamp;
@@ -871,44 +927,28 @@ function drawJudgement(
   ctx.scale(scale, scale);
   ctx.globalAlpha = alpha;
 
-  let judgeImg: HTMLImageElement | null = null;
-  if (customSkinTextures) {
-    switch (judgement.tier) {
-      case "MAX": judgeImg = customSkinTextures.hit300g ?? customSkinTextures.hit300; break;
-      case "PERFECT": judgeImg = customSkinTextures.hit300; break;
-      case "GREAT": judgeImg = customSkinTextures.hit200; break;
-      case "GOOD": judgeImg = customSkinTextures.hit100; break;
-      case "MISS": judgeImg = customSkinTextures.hit0; break;
-    }
+  // Por el momento, usar el MAX / Judge tipográfico por defecto de nuestro proyecto
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  let textColor = "#38bdf8";
+  let glowColor = "rgba(56, 189, 248, 0.8)";
+  let label = judgement.tier;
+
+  switch (judgement.tier) {
+    case "MAX": textColor = "#38bdf8"; glowColor = "rgba(56, 189, 248, 0.85)"; break;
+    case "PERFECT": textColor = "#fbbf24"; glowColor = "rgba(251, 191, 36, 0.85)"; break;
+    case "GREAT": textColor = "#34d399"; glowColor = "rgba(52, 211, 153, 0.75)"; break;
+    case "GOOD": textColor = "#818cf8"; glowColor = "rgba(129, 140, 248, 0.75)"; break;
+    case "MISS": textColor = "#f43f5e"; glowColor = "rgba(244, 63, 94, 0.75)"; break;
   }
 
-  if (judgeImg && judgeImg.complete && judgeImg.naturalWidth > 0) {
-    const imgW = judgeImg.naturalWidth;
-    const imgH = judgeImg.naturalHeight;
-    ctx.drawImage(judgeImg, -imgW / 2, -imgH / 2, imgW, imgH);
-  } else {
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    let textColor = "#38bdf8";
-    let glowColor = "rgba(56, 189, 248, 0.8)";
-    let label = judgement.tier;
-
-    switch (judgement.tier) {
-      case "MAX": textColor = "#38bdf8"; glowColor = "rgba(56, 189, 248, 0.85)"; break;
-      case "PERFECT": textColor = "#fbbf24"; glowColor = "rgba(251, 191, 36, 0.85)"; break;
-      case "GREAT": textColor = "#34d399"; glowColor = "rgba(52, 211, 153, 0.75)"; break;
-      case "GOOD": textColor = "#818cf8"; glowColor = "rgba(129, 140, 248, 0.75)"; break;
-      case "MISS": textColor = "#f43f5e"; glowColor = "rgba(244, 63, 94, 0.75)"; break;
-    }
-
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = elapsed < 120 ? 14 : 6;
-    ctx.fillStyle = textColor;
-    ctx.font = "900 15px 'Inter', system-ui, -apple-system, sans-serif";
-    ctx.letterSpacing = "2px";
-    ctx.fillText(label, 0, 0);
-  }
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = elapsed < 120 ? 14 : 6;
+  ctx.fillStyle = textColor;
+  ctx.font = "900 15px 'Inter', system-ui, -apple-system, sans-serif";
+  ctx.letterSpacing = "2px";
+  ctx.fillText(label, 0, 0);
 
   ctx.restore();
 }
@@ -1060,26 +1100,23 @@ function drawNoteBar(
   scrollDirection: "down" | "up" = "down",
 ): void {
   const x = Math.round(centerX - noteWidth / 2);
-  // Al crecer el tamaño de la nota:
-  // En downscroll: la base inferior de la nota se ancla exactamente en `y` (hitLine), creciendo hacia arriba.
-  // En upscroll: la base superior de la nota se ancla exactamente en `y` (hitLine), creciendo hacia abajo.
   const topY = scrollDirection === "down" ? Math.round(y - noteHeight) : Math.round(y);
 
-  const grad = ctx.createLinearGradient(0, topY, 0, topY + noteHeight);
-  grad.addColorStop(0, skin.top);
-  grad.addColorStop(0.35, skin.mid);
-  grad.addColorStop(1, skin.bot);
+  ctx.save();
+  ctx.translate(x, topY);
 
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, topY, noteWidth, noteHeight);
+  ctx.fillStyle = getNoteGradient(ctx, skin, noteHeight);
+  ctx.fillRect(0, 0, noteWidth, noteHeight);
 
   // Borde fino superior de brillo
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillRect(x, topY, noteWidth, 2);
+  ctx.fillRect(0, 0, noteWidth, 2);
 
   // Borde fino inferior de sombra
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-  ctx.fillRect(x, topY + noteHeight - 2, noteWidth, 2);
+  ctx.fillRect(0, noteHeight - 2, noteWidth, 2);
+  
+  ctx.restore();
 }
 
 /**
@@ -1107,7 +1144,9 @@ function drawDebugHitWindows(
 
   ctx.save();
 
-  for (let i = 0; i < hitObjects.length; i++) {
+  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection);
+
+  for (let i = startIndex; i < hitObjects.length; i++) {
     // Si la nota ya fue juzgada, no dibujar su zona de hit
     if (hitNoteIndices && hitNoteIndices.has(i)) {
       continue;
@@ -1116,6 +1155,11 @@ function drawDebugHitWindows(
     const note = hitObjects[i];
     if (!note) {
       continue;
+    }
+    
+    // Si la nota está muy en el futuro, no será visible
+    if (note.timeMs > currentTimeMs + metrics.approachMs + HIT_WINDOW_MS + 2000) {
+      break;
     }
     const columnIndex = Math.min(note.column, keyCount - 1);
     const centerX = getColumnCenterX(columnIndex, keyCount, metrics.width);

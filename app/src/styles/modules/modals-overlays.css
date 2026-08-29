@@ -24,6 +24,123 @@
   }
 }
 
+/* ==========================================================================
+   FULLSCREEN DRAG & DROP OVERLAY (INMERSIVO CON LETRAS GIGANTES)
+   ========================================================================== */
+
+.fullscreen-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(4, 6, 11, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  pointer-events: none;
+  animation: dropOverlayFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-sizing: border-box;
+}
+
+@keyframes dropOverlayFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fullscreen-drop-border {
+  position: absolute;
+  inset: 20px;
+  border: 3px dashed rgba(56, 189, 248, 0.45);
+  border-radius: 24px;
+  pointer-events: none;
+  animation: dropBorderPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes dropBorderPulse {
+  0%, 100% {
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+  50% {
+    border-color: rgba(56, 189, 248, 0.85);
+  }
+}
+
+.fullscreen-drop-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+  max-width: 900px;
+}
+
+.fullscreen-drop-icon-gem {
+  width: 110px;
+  height: 110px;
+  border-radius: 28px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* animation: dropIconBounce 1s ease-in-out infinite alternate; */
+}
+
+/* @keyframes dropIconBounce {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-8px) scale(1.06);
+  }
+} */
+
+.fullscreen-drop-title {
+  font-size: clamp(2.4rem, 3vw, 3.5rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.fullscreen-drop-subtitle {
+  font-size: 1.25rem;
+  color: #94a3b8;
+  margin: 0;
+  font-weight: 500;
+}
+
+.text-cyan {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.fullscreen-drop-tag {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 14px;
+  border-radius: 9999px;
+  margin-top: 8px;
+}
+
 .modal-dialog {
   background: rgba(18, 23, 31, 0.94);
   backdrop-filter: blur(24px);
@@ -458,6 +575,76 @@
   font-size: 0.72rem;
   font-weight: 700;
   padding: 2px 6px;
+}
+
+/* Barra de Filtros (4K / 7K / Todos) */
+.quick-search-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quick-search-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quick-search-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.quick-search-filter-pill:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.quick-search-filter-pill.is-active {
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+}
+
+.quick-search-filter-pill.pill-4k.is-active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border-color: #38bdf8;
+}
+
+.quick-search-filter-pill.pill-7k.is-active {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.16);
+  border-color: #c084fc;
+}
+
+.quick-search-filter-count {
+  font-size: 0.68rem;
+  padding: 0px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+.quick-search-filter-hint {
+  font-size: 0.72rem;
+  color: #64748b;
 }
 
 .quick-search-results {

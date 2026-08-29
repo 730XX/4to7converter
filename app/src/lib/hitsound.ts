@@ -73,8 +73,11 @@ class HitSoundEngine {
       const source = ctx.createBufferSource();
       source.buffer = this.audioBuffer;
 
+      // Normalización suave para equilibrar los hitsounds con la pista musical y evitar distorsión
+      const normalizedVolume = Math.max(0.005, Math.min(0.65, volume * 0.45));
+
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(Math.max(0.01, Math.min(1.0, volume)), ctx.currentTime);
+      gain.gain.setValueAtTime(normalizedVolume, ctx.currentTime);
 
       source.connect(gain);
       gain.connect(ctx.destination);

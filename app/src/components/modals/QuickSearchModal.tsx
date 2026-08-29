@@ -13,6 +13,8 @@ interface QuickSearchModalProps {
  * Modal flotante de búsqueda rápida estilo PowerToys Run / Spotlight.
  * Agrupa los resultados por Mapset / Canción para máxima velocidad y claridad.
  */
+type KeyFilterMode = "all" | "4k" | "7k";
+
 export function QuickSearchModal({
   isOpen,
   onClose,
@@ -21,6 +23,7 @@ export function QuickSearchModal({
 }: QuickSearchModalProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BeatmapSearchItem[]>([]);
+  const [keyFilter, setKeyFilter] = useState<KeyFilterMode>("all");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -43,6 +46,17 @@ export function QuickSearchModal({
     onSelectBeatmap(path);
     onClose();
   }
+
+  // Filtrar resultados según el modo de teclas seleccionado
+  const filteredResults = results.filter((item) => {
+    if (keyFilter === "4k") {
+      return item.key_modes.includes("4K");
+    }
+    if (keyFilter === "7k") {
+      return item.key_modes.includes("7K");
+    }
+    return true;
+  });
 
   // Búsqueda con debounce para fluidez total al escribir
   useEffect(() => {
@@ -87,25 +101,25 @@ export function QuickSearchModal({
       return;
     }
 
-    if (results.length === 0) return;
+    if (filteredResults.length === 0) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSelectedIndex((prev) => {
-        const next = prev < results.length - 1 ? prev + 1 : 0;
+        const next = prev < filteredResults.length - 1 ? prev + 1 : 0;
         scrollToItem(next);
         return next;
       });
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setSelectedIndex((prev) => {
-        const next = prev > 0 ? prev - 1 : results.length - 1;
+        const next = prev > 0 ? prev - 1 : filteredResults.length - 1;
         scrollToItem(next);
         return next;
       });
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const selected = results[selectedIndex];
+      const selected = filteredResults[selectedIndex];
       if (selected) {
         handleSelect(selected.path);
       }
@@ -120,6 +134,10 @@ export function QuickSearchModal({
       item.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }
+
+  // Contar cuántos mapas tienen 4K y 7K en los resultados actuales
+  const count4k = results.filter((item) => item.key_modes.includes("4K")).length;
+  const count7k = results.filter((item) => item.key_modes.includes("7K")).length;
 
   if (!isOpen) {
     return null;
@@ -169,14 +187,69 @@ export function QuickSearchModal({
           )}
         </div>
 
+        {/* Barra de Filtros de Teclas (Todos / 4K / 7K) */}
+        <div className="quick-search-filter-bar">
+          <div className="quick-search-filter-group">
+            <button
+              type="button"
+              className={`quick-search-filter-pill ${keyFilter === "all" ? "is-active" : ""}`}
+              onClick={() => {
+                setKeyFilter("all");
+                setSelectedIndex(0);
+              }}
+            >
+              <span>Todos</span>
+              {results.length > 0 && (
+                <span className="quick-search-filter-count mono">{results.length}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`quick-search-filter-pill pill-4k ${keyFilter === "4k" ? "is-active" : ""}`}
+              onClick={() => {
+                setKeyFilter("4k");
+                setSelectedIndex(0);
+              }}
+            >
+              <span>4K</span>
+              {results.length > 0 && (
+                <span className="quick-search-filter-count mono">{count4k}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`quick-search-filter-pill pill-7k ${keyFilter === "7k" ? "is-active" : ""}`}
+              onClick={() => {
+                setKeyFilter("7k");
+                setSelectedIndex(0);
+              }}
+            >
+              <span>7K</span>
+              {results.length > 0 && (
+                <span className="quick-search-filter-count mono">{count7k}</span>
+              )}
+            </button>
+          </div>
+
+          <span className="quick-search-filter-hint">
+            {keyFilter === "4k"
+              ? "Mostrando solo canciones con dificultades 4K"
+              : keyFilter === "7k"
+                ? "Mostrando solo canciones con dificultades 7K"
+                : "Mostrando todos los modos"}
+          </span>
+        </div>
+
         {/* Lista de Resultados Agrupados por Mapset */}
         <div
           className="quick-search-results"
           ref={listRef}
           onWheel={(e) => e.stopPropagation()}
         >
-          {results.length > 0 ? (
-            results.map((item, index) => (
+          {filteredResults.length > 0 ? (
+            filteredResults.map((item, index) => (
               <QuickSearchCardItem
                 key={`${item.path}-${index}`}
                 item={item}
@@ -189,7 +262,11 @@ export function QuickSearchModal({
           ) : query.trim() && !isLoading ? (
             <div className="quick-search-empty">
               <Sparkles size={24} className="text-muted" />
-              <p>No se encontraron paquetes o canciones que coincidan con "{query}"</p>
+              <p>
+                {results.length > 0 && keyFilter !== "all"
+                  ? `No hay canciones en modo ${keyFilter.toUpperCase()} para esta búsqueda.`
+                  : `No se encontraron paquetes o canciones que coincidan con "${query}"`}
+              </p>
             </div>
           ) : (
             <div className="quick-search-hint-footer">

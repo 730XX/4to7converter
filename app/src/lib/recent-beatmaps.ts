@@ -13,7 +13,22 @@ export interface RecentBeatmapItem {
 }
 
 const STORAGE_KEY = "4to7_recent_beatmaps_v1";
-const MAX_RECENTS = 6;
+const MAX_RECENTS = 40;
+
+/**
+ * Obtiene una clave única para el Mapset / Canción.
+ * Prioriza la carpeta contenedora si existe la ruta de disco, o la combinación de Artista y Título.
+ */
+function getMapsetKey(item: { path: string; artist: string; title: string }): string {
+  if (item.path && item.path.trim()) {
+    const normalized = item.path.replace(/\\/g, "/");
+    const lastSlash = normalized.lastIndexOf("/");
+    if (lastSlash > 0) {
+      return normalized.slice(0, lastSlash).toLowerCase();
+    }
+  }
+  return `${item.artist.trim().toLowerCase()}:::${item.title.trim().toLowerCase()}`;
+}
 
 export function loadRecentBeatmaps(): RecentBeatmapItem[] {
   try {
@@ -21,7 +36,19 @@ export function loadRecentBeatmaps(): RecentBeatmapItem[] {
     if (!raw) return getDefaultRecentBeatmaps();
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed as RecentBeatmapItem[];
+      // Deduplicar retroactivamente por mapset, conservando la entrada más reciente
+      const seenKeys = new Set<string>();
+      const deduped: RecentBeatmapItem[] = [];
+
+      for (const item of parsed as RecentBeatmapItem[]) {
+        const key = getMapsetKey(item);
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          deduped.push(item);
+        }
+      }
+
+      return deduped;
     }
     return getDefaultRecentBeatmaps();
   } catch {
@@ -37,7 +64,12 @@ export function saveRecentBeatmap(item: Omit<RecentBeatmapItem, "id" | "timestam
       id: `${item.path}_${Date.now()}`,
       timestamp: Date.now(),
     };
-    const updated = [newItem, ...current.filter((b) => b.path !== item.path)].slice(0, MAX_RECENTS);
+
+    const targetKey = getMapsetKey(newItem);
+    // Eliminar cualquier versión o dificultad previa de este mismo mapset
+    const filtered = current.filter((b) => getMapsetKey(b) !== targetKey);
+    const updated = [newItem, ...filtered].slice(0, MAX_RECENTS);
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error("Error al guardar mapa reciente:", err);
