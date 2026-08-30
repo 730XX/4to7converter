@@ -6,12 +6,14 @@ import {
   Columns2,
   Grid3X3,
   Play,
+  Trash2,
   Tv,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { formatTimeAgo, type RecentBeatmapItem } from "../../lib/recent-beatmaps";
 import { isTauri, loadBeatmapWithAudio, toAssetUrl, toAudioUrl } from "../../lib/native";
+import { getAudioEncoderDelayMs } from "../../lib/audio";
 import { AudioVisualizer } from "./AudioVisualizer";
 
 type ViewLayoutMode = "grid3" | "grid2" | "bms";
@@ -20,6 +22,7 @@ interface RecentBeatmapsProps {
   maps: readonly RecentBeatmapItem[];
   onSelectMap: (path: string) => void;
   onFallbackBrowse: () => void;
+  onRemoveMap?: (item: RecentBeatmapItem) => void;
   volume?: number;
   onBmsStateChange?: (
     activeMap: RecentBeatmapItem | null,
@@ -42,6 +45,7 @@ export function RecentBeatmaps({
   maps,
   onSelectMap,
   onFallbackBrowse,
+  onRemoveMap,
   volume = 80,
   onBmsStateChange,
 }: RecentBeatmapsProps) {
@@ -111,8 +115,9 @@ export function RecentBeatmaps({
   // AUDIO PREVIEW ENGINE (Carga y reproduce el audio en PreviewTime)
   // =========================================================================
   useEffect(() => {
-    // Si no estamos en modo BMS o no hay path o no estamos en Tauri, pausar y salir
-    if (layoutMode !== "bms" || !activeBmsMap?.path || isPreviewMuted || !isTauri()) {
+    // Solo cargar/reproducir audio cuando estamos en modo BMS con un map y en Tauri.
+    // El estado de mute NO debe re-ejecutar este efecto (evita recargar y reiniciar el audio).
+    if (layoutMode !== "bms" || !activeBmsMap?.path || !isTauri()) {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
@@ -157,7 +162,9 @@ export function RecentBeatmaps({
           if (isCancelled) return;
           // Validar que el duration es un número válido y mayor a 0
           if (previewSec > 0 && Number.isFinite(audio.duration) && previewSec < audio.duration) {
-            audio.currentTime = previewSec;
+            // Sumar el encoder delay (según formato del audio) para que el tiempo de
+            // partida quede alineado con el reloj del beatmap (igual que el preview principal).
+            audio.currentTime = previewSec + getAudioEncoderDelayMs(result.audioPath ?? "") / 1000;
           } else {
             audio.currentTime = 0;
           }
@@ -194,7 +201,16 @@ export function RecentBeatmaps({
         audioRef.current.src = "";
       }
     };
-  }, [layoutMode, activeBmsMap?.path, isPreviewMuted]);
+  }, [layoutMode, activeBmsMap?.path]);
+
+  // Sincronizar solo el estado de mute con el elemento de audio, sin recargar ni reiniciar.
+  // `muted` silencia el audio pero mantiene la reproducción (currentTime sigue avanzando),
+  // por lo que la mini preview del mapa sigue en sincronía.
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = isPreviewMuted;
+    }
+  }, [isPreviewMuted]);
 
   // Actualizar volumen en caliente si el usuario usa atajos en el Home
   useEffect(() => {
@@ -343,6 +359,19 @@ export function RecentBeatmaps({
                   </span>
                   <span className="home-track-bpm mono">{map.bpm} BPM</span>
                 </div>
+
+                <div
+                  className="home-track-remove"
+                  role="button"
+                  aria-label="Quitar de recientes"
+                  title="Quitar de recientes"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveMap?.(map);
+                  }}
+                >
+                  <Trash2 size={11} />
+                </div>
               </button>
             );
           })}
@@ -414,6 +443,16 @@ export function RecentBeatmaps({
                       ) : (
                         <Volume2 size={13} />
                       )}
+                    </button>
+
+                    {/* Quitar este mapa de recientes */}
+                    <button
+                      type="button"
+                      onClick={() => activeBmsMap && onRemoveMap?.(activeBmsMap)}
+                      className="home-bms-remove-btn"
+                      title="Quitar de recientes"
+                    >
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>

@@ -690,6 +690,26 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+/* Botón para quitar el mapa activo del carrusel BMS */
+.home-bms-remove-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  font-size: 0.65rem;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.home-bms-remove-btn:hover {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.15);
+  border-radius: 6px;
+}
+
 .home-bms-song-title {
   font-size: 1.35rem;
   font-weight: 800;
@@ -927,6 +947,37 @@
 
 .home-track-card:hover .home-track-jacket-play {
   opacity: 1;
+}
+
+/* Botón para quitar un mapa de recientes (overlay sobre la card) */
+.home-track-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(8, 12, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: all 0.14s ease;
+}
+
+.home-track-card:hover .home-track-remove {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.home-track-remove:hover {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.5);
+  background: rgba(40, 12, 20, 0.85);
 }
 
 /* 2. Información del Track */

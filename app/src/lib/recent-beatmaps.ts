@@ -76,6 +76,19 @@ export function saveRecentBeatmap(item: Omit<RecentBeatmapItem, "id" | "timestam
   }
 }
 
+/**
+ * Elimina un mapa de la lista de recientes (por clave de mapset).
+ */
+export function removeRecentBeatmap(item: Pick<RecentBeatmapItem, "path" | "artist" | "title">): void {
+  try {
+    const targetKey = getMapsetKey(item);
+    const current = loadRecentBeatmaps().filter((b) => getMapsetKey(b) !== targetKey);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  } catch (err) {
+    console.error("Error al eliminar mapa reciente:", err);
+  }
+}
+
 function getDefaultRecentBeatmaps(): RecentBeatmapItem[] {
   return [
     {

@@ -58,7 +58,7 @@ import {
   type LanePreset,
 } from "./lib/lane-presets";
 import { usePlayback } from "./lib/use-playback";
-import { saveRecentBeatmap } from "./lib/recent-beatmaps";
+import { loadRecentBeatmaps, saveRecentBeatmap } from "./lib/recent-beatmaps";
 import { formatTimeMs } from "./preview/preview-math";
 import {
   type UiTimelineSection,
@@ -89,10 +89,32 @@ interface LoadError {
 }
 
 /** Orquesta el flujo completo: carga, mapeo, estadísticas, validación y exportación. */
+/**
+ * Precarga una imagen resolviendo en cuanto carga (o si falla, para no colgar
+ * nunca la transición de escena). Se usa para saber cuándo la escena está lista.
+ */
+function preloadImage(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
+
+/**
+ * Velo de transición de escena: cubre la pantalla mientras la vista entrante
+ * carga y se desvanece (vía CSS transition, no un timer) cuando `ready` es true.
+ */
+function SceneTransitionVeil({ ready }: { ready: boolean }) {
+  return (
+    <div className={`scene-transition-veil ${ready ? "is-hidden" : "is-visible"}`} aria-hidden="true" />
+  );
+}
+
 export default function App() {
   const [fileName, setFileName] = useState<string | null>(null);
-  const [source, setSource] = useState<OsuBeatmap | null>(null);
-  const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [source, setSource] = useState<OsuBeatmap | null>(null);  const [loadError, setLoadError] = useState<LoadError | null>(null);
   const [laneMapState, setLaneMapState] = useState<LaneMapState>(
     () => loadActiveLaneMapState() ?? createDefaultLaneMapState(),
   );
@@ -214,6 +236,18 @@ export default function App() {
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const isPlayModeRef = useRef(isPlayMode);
   isPlayModeRef.current = isPlayMode;
+  // Mirrors en refs para evitar closures viejos dentro del efecto de teclado (deps []).
+  const sourceLoadedRef = useRef(false);
+  sourceLoadedRef.current = source !== null;
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const handleResetRef = useRef<() => void>(() => {});
+  const anyOverlayOpenRef = useRef(false);
+  anyOverlayOpenRef.current =
+    isSettingsOpen || isQuickSearchOpen || isFileModalOpen || isDiffSwitcherOpen || isKeybindsModalOpen;
+
+  // Transición de escena: el velo cubre hasta que la vista entrante cargó sus assets.
+  const [isSceneReady, setIsSceneReady] = useState(false);
 
   // Atajos de teclado y combinaciones con rueda de ratón
   useEffect(() => {
@@ -257,15 +291,32 @@ export default function App() {
         return;
       }
 
-      // Escape: Salir del Modo Play inmediatamente
+      // Escape: Salir del Modo Play, o si estamos en el editor, volver al home
       if (event.code === "Escape") {
-        setIsPlayMode((prev) => {
-          if (prev) {
-            event.preventDefault();
-            return false;
-          }
-          return prev;
-        });
+        if (isPlayModeRef.current) {
+          event.preventDefault();
+          setIsPlayMode(false);
+          return;
+        }
+
+        // Si hay un modal de App abierto (SettingsDrawer siempre está en DOM, por eso se controla por estado)
+        if (anyOverlayOpenRef.current) {
+          return;
+        }
+
+        // Modales/overlays que App no controla con estado: solo están en DOM cuando están abiertos
+        const isOtherOverlayOpen = document.querySelector(
+          ".modal-overlay, .debug-console-panel",
+        );
+        if (isOtherOverlayOpen) {
+          return;
+        }
+
+        // En el editor (sin modales): volver al home descargando el beatmap
+        if (sourceLoadedRef.current) {
+          event.preventDefault();
+          handleResetRef.current();
+        }
       }
 
       // Tab solo (sin Ctrl, Alt ni Shift): Intercalar entre 7K y Split (desactivado en Modo Play)
@@ -421,6 +472,8 @@ export default function App() {
   }
 
   async function handlePathSelected(path: string): Promise<void> {
+    // Velo solo al pasar de home a editor (no al cambiar de dificultad dentro del editor).
+    if (source === null) setIsSceneReady(false);
     try {
       const isDiffChange = isSameSongFolder(sourcePath, path);
       if (!isDiffChange) {
@@ -498,6 +551,10 @@ export default function App() {
           : 120,
         backgroundPath: targetBackgroundPath ?? null,
       });
+      // Precargar la cover del mapa recién abierto para que no "popee" al volver al home.
+      if (targetBackgroundPath) {
+        void preloadImage(toAssetUrl(targetBackgroundPath));
+      }
 
       // Inicializar una sección inicial para toda la canción
       const initialSecs = createInitialSection(Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000), laneMapState);
@@ -521,6 +578,8 @@ export default function App() {
   }
 
   async function handleFileSelected(file: File): Promise<void> {
+    // Velo solo si venimos del home (cambio de vista).
+    if (source === null) setIsSceneReady(false);
     try {
       playbackRef.current?.pause();
       playbackRef.current?.seekTo(0);
@@ -567,6 +626,7 @@ export default function App() {
   }
 
   function handleReset(): void {
+    setIsSceneReady(false);
     playbackRef.current?.pause();
     playbackRef.current?.seekTo(0);
 
@@ -585,10 +645,15 @@ export default function App() {
     setActiveSectionId(null);
   }
 
+  // Mantener el ref de handleReset actualizado para el atajo ESC (sin closures viejos).
+  handleResetRef.current = handleReset;
+
   function handleSplitSection(): void {
-    if (!source || playbackRef.current === null) return;
+    // Leer desde los refs para evitar el closure viejo del efecto de teclado (deps []).
+    const currentSource = sourceRef.current;
+    if (!currentSource || playbackRef.current === null) return;
     const curTime = playbackRef.current.currentTimeMsRef.current;
-    const lastObjTime = source.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
+    const lastObjTime = currentSource.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
     const duration = playbackRef.current.durationMs > 0 ? playbackRef.current.durationMs : Math.max(lastObjTime, 1000);
 
     const { newSections, createdSectionId } = splitSectionAt(
@@ -670,6 +735,61 @@ export default function App() {
     () => (converted === null ? [] : validateConvertedBeatmap(converted)),
     [converted],
   );
+
+  // Detección de carga de la escena: el velo se desvanece recién cuando la vista
+  // entrante está lista (home local = tras unos frames; editor = fondo cargado).
+  useEffect(() => {
+    let cancelled = false;
+
+    // Vista home: revelar de inmediato (las covers se precargan aparte en background
+    // para que no aparezcan "de golpe"); así el cambio es instantáneo y consistente.
+    if (source === null) {
+      const raf1 = requestAnimationFrame(() => {
+        void requestAnimationFrame(() => {
+          if (!cancelled) setIsSceneReady(true);
+        });
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf1);
+      };
+    }
+
+    // Vista editor: esperar a que la imagen de fondo termine de cargar (la que más tarda).
+    if (converted !== null && fileName !== null) {
+      if (backgroundUrl) {
+        preloadImage(backgroundUrl).then(() => {
+          if (!cancelled) setIsSceneReady(true);
+        });
+      } else {
+        const raf = requestAnimationFrame(() => {
+          if (!cancelled) setIsSceneReady(true);
+        });
+        return () => {
+          cancelled = true;
+          cancelAnimationFrame(raf);
+        };
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Estado intermedio de carga: mantener el velo.
+    return () => {
+      cancelled = true;
+    };
+  }, [source, converted, fileName, backgroundUrl]);
+
+  // Precarga en background las covers de los mapas recientes para que, al volver al
+  // home, ya estén cacheadas y no aparezcan "de golpe" tras la transición.
+  useEffect(() => {
+    const covers = loadRecentBeatmaps()
+      .map((b) => b.backgroundPath)
+      .filter((p): p is string => Boolean(p))
+      .map((p) => toAssetUrl(p));
+    void Promise.all(covers.map(preloadImage));
+  }, []);
 
   const targetColumnCounts = useMemo(
     () => getTargetColumnCounts(laneMapState, TARGET_KEY_COUNT),
@@ -863,6 +983,7 @@ export default function App() {
           onSelectBeatmap={(path) => void handlePathSelected(path)}
           currentBeatmapPath={sourcePath}
         />
+        <SceneTransitionVeil ready={isSceneReady} />
       </>
     );
   }
@@ -894,6 +1015,7 @@ export default function App() {
           onSelectBeatmap={(path) => void handlePathSelected(path)}
           currentBeatmapPath={sourcePath}
         />
+        <SceneTransitionVeil ready={isSceneReady} />
       </>
     );
   }
@@ -1063,6 +1185,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <SceneTransitionVeil ready={isSceneReady} />
     </>
   );
 }

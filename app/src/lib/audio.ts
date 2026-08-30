@@ -34,7 +34,21 @@ export interface AudioPlayer {
 }
 
 /** Retardo estándar de compresión LAME en MP3 (1152 muestras a 44.1kHz ≈ 26.12 ms) */
-const MP3_ENCODER_DELAY_MS = 26;
+export const MP3_ENCODER_DELAY_MS = 26;
+
+/**
+ * Retardo de encoder según el formato de audio. El "encoder delay" solo aplica a
+ * formatos con lead-in de compresión (MP3/LAME ≈ 26 ms). OGG/Vorbis, WAV, FLAC,
+ * AAC/M4A y Opus no añaden ese retardo (o lo traen a ~0), por lo que aplicar 26 ms
+ * ahí desincroniza la preview. Se decide por la extensión del archivo/URL.
+ */
+export function getAudioEncoderDelayMs(audioUrlOrPath: string): number {
+  const clean = ((audioUrlOrPath || "").split("?")[0] ?? "").toLowerCase();
+  if (clean.endsWith(".mp3")) {
+    return MP3_ENCODER_DELAY_MS;
+  }
+  return 0;
+}
 
 /**
  * Crea un reproductor Web Audio API optimizado para juegos de ritmo.
@@ -49,6 +63,7 @@ export function createAudioPlayer(): AudioPlayer {
   let playbackRate = 1;
   let volume = 0.8;
   let rawDurationMs = 0;
+  let encoderDelayMs = MP3_ENCODER_DELAY_MS;
 
   let startCtxTime = 0;
   let startOffsetSec = 0;
@@ -128,6 +143,8 @@ export function createAudioPlayer(): AudioPlayer {
     isPlaying = false;
     pausedOffsetSec = 0;
 
+    encoderDelayMs = getAudioEncoderDelayMs(url);
+
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     audioBuffer = await context.decodeAudioData(arrayBuffer);
@@ -148,14 +165,14 @@ export function createAudioPlayer(): AudioPlayer {
   function pause(): void {
     if (!isPlaying) return;
     const currentMs = getCurrentTimeMs();
-    pausedOffsetSec = (currentMs + MP3_ENCODER_DELAY_MS) / 1000;
+    pausedOffsetSec = (currentMs + encoderDelayMs) / 1000;
     stopCurrentSource();
     isPlaying = false;
   }
 
   function seek(timeMs: number): void {
     // Al saltar en la canción, mapeamos el tiempo del beatmap al tiempo real del buffer
-    const targetBufferSec = Math.max(0, Math.min((timeMs + MP3_ENCODER_DELAY_MS) / 1000, rawDurationMs / 1000));
+    const targetBufferSec = Math.max(0, Math.min((timeMs + encoderDelayMs) / 1000, rawDurationMs / 1000));
     pausedOffsetSec = targetBufferSec;
     if (isPlaying) {
       startSourceAt(targetBufferSec);
@@ -168,10 +185,10 @@ export function createAudioPlayer(): AudioPlayer {
       const elapsedCtxTime = ctx.currentTime - startCtxTime;
       const currentBufferSec = startOffsetSec + elapsedCtxTime * playbackRate;
       // Restamos el encoder delay para que el reloj coincida exactamente con las marcas de tiempo del beatmap
-      const beatmapTimeMs = currentBufferSec * 1000 - MP3_ENCODER_DELAY_MS;
+      const beatmapTimeMs = currentBufferSec * 1000 - encoderDelayMs;
       return Math.max(0, Math.min(beatmapTimeMs, rawDurationMs));
     }
-    const beatmapTimeMs = pausedOffsetSec * 1000 - MP3_ENCODER_DELAY_MS;
+    const beatmapTimeMs = pausedOffsetSec * 1000 - encoderDelayMs;
     return Math.max(0, Math.min(beatmapTimeMs, rawDurationMs));
   }
 
@@ -184,7 +201,7 @@ export function createAudioPlayer(): AudioPlayer {
       playbackRate = rate;
       if (currentSource && ctx) {
         const currentMs = getCurrentTimeMs();
-        startOffsetSec = (currentMs + MP3_ENCODER_DELAY_MS) / 1000;
+        startOffsetSec = (currentMs + encoderDelayMs) / 1000;
         startCtxTime = ctx.currentTime;
         currentSource.playbackRate.setValueAtTime(rate, ctx.currentTime);
       }

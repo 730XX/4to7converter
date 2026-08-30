@@ -185,10 +185,29 @@ export class PlayEngine {
   }
 
   /**
+   * Sembra el cursor de Autoplay en un tiempo dado para que las notas anteriores
+   * a ese momento NO vuelvan a juzgarse ni a disparar hitsounds. Útil al cambiar
+   * de mapa/reiniciar en mitad de la canción. El array de notas está ordenado por tiempo.
+   */
+  public seedAutoplayCursor(atTimeMs: number): void {
+    let lo = 0;
+    let hi = this.hitObjects.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const note = this.hitObjects[mid];
+      if (note && note.timeMs < atTimeMs) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    this.nextUnjudgedIndex = lo;
+  }
+
+  /**
    * Ejecuta la lógica de Autoplay perfecta (0ms de error, MAX score, hitsounds e iluminación de carril).
    */
-  public updateAutoplay(
-    currentTimeMs: number,
+  public updateAutoplay(    currentTimeMs: number,
     onHitSound?: (effectiveVol: number) => void,
     hitsoundVolume: number = 20,
   ): void {

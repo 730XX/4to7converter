@@ -10,6 +10,8 @@
   filter: blur(28px) brightness(0.42);
   transform: scale(1.08);
   pointer-events: none;
+  /* Fade un poco más largo para enmascarar la carga de la imagen de fondo */
+  animation: backdropFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .app-shell {
@@ -23,6 +25,32 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* ----- Velo de transición de escena (equivale a fade-in/out igual en ambos sentidos) ----- */
+.scene-transition-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background-color: #000;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.35s;
+}
+
+.scene-transition-veil.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .app-header,

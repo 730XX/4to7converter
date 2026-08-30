@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { detectOsuBeatmap, isTauri, type OsuDetectedBeatmap } from "../../lib/native";
-import { loadRecentBeatmaps, type RecentBeatmapItem } from "../../lib/recent-beatmaps";
+import { loadRecentBeatmaps, removeRecentBeatmap, type RecentBeatmapItem } from "../../lib/recent-beatmaps";
 import { BrandHeader } from "./BrandHeader";
 import { DropZone } from "./DropZone";
 import { RecentBeatmaps } from "./RecentBeatmaps";
@@ -34,7 +34,7 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const [detectedMap, setDetectedMap] = useState<OsuDetectedBeatmap | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [recentMaps] = useState<RecentBeatmapItem[]>(() => loadRecentBeatmaps());
+  const [recentMaps, setRecentMaps] = useState<RecentBeatmapItem[]>(() => loadRecentBeatmaps());
   const [activeBmsState, setActiveBmsState] = useState<{
     map: RecentBeatmapItem | null;
     isBmsMode: boolean;
@@ -154,6 +154,11 @@ export function HomeScreen({
     });
   };
 
+  const handleRemoveRecentMap = (item: RecentBeatmapItem) => {
+    removeRecentBeatmap(item);
+    setRecentMaps((prev) => prev.filter((b) => b.id !== item.id));
+  };
+
   return (
     <div className="home-screen-wrapper">
       <BgaBackground />
@@ -176,6 +181,7 @@ export function HomeScreen({
               maps={recentMaps}
               onSelectMap={(path) => onPathSelectedRef.current(path)}
               onFallbackBrowse={() => void openFilePicker()}
+              onRemoveMap={handleRemoveRecentMap}
               volume={settings?.volume ?? 80}
               onBmsStateChange={handleBmsStateChange}
             />
@@ -190,7 +196,9 @@ export function HomeScreen({
                 isPlaying={activeBmsState.isPlaying}
                 scrollSpeed={settings?.scrollSpeed ?? 25}
                 scrollDirection={settings?.scrollDirection ?? "down"}
-                hitsoundVolume={settings?.hitsoundVolume ?? 35}
+                hitsoundVolume={
+                  activeBmsState.isPlaying ? (settings?.hitsoundVolume ?? 35) : 0
+                }
                 hitPositionOffset={settings?.hitPositionOffset ?? 20}
                 receptorOffset={settings?.receptorOffset ?? 0}
                 noteHeight={settings?.noteHeight ?? 16}

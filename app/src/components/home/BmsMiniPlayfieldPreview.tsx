@@ -3,6 +3,7 @@ import { parseOsuFile } from "../../../../src/core/osu/parser";
 import type { HitObject, OsuBeatmap } from "../../../../src/core/osu/types";
 import { loadBeatmapWithAudio, loadOsuSkinConfig } from "../../lib/native";
 import { loadSettings } from "../../lib/settings";
+import { getAudioEncoderDelayMs } from "../../lib/audio";
 import { PlayEngine } from "../../preview/play-engine";
 import { buildPlayfieldPalette, drawPlayfieldFrame, type PlayfieldPalette } from "../../preview/renderer";
 import { loadAllSkinTextures, type LoadedSkinTextures } from "../../preview/skin-manager";
@@ -55,6 +56,10 @@ export function BmsMiniPlayfieldPreview({
   const noteHeightRef = useRef<number>(noteHeight);
   const isPlayingRef = useRef<boolean>(isPlaying);
   const lastTimeMsRef = useRef<number>(0);
+  const encoderDelayMsRef = useRef<number>(0);
+  // Marca que el motor se acaba de (re)inicializar y hay que sembrar el cursor
+  // de Autoplay en el tiempo actual para no re-disparar notas ya pasadas.
+  const pendingSeedRef = useRef<boolean>(false);
 
   // Sincronizador de tiempo continuo de alta precisión
   const lastSyncAudioTimeRef = useRef<number>(0);
@@ -128,6 +133,9 @@ export function BmsMiniPlayfieldPreview({
         playEngineRef.current.init(normalized, 4);
         paletteRef.current = buildPlayfieldPalette(4);
         lastTimeMsRef.current = 0;
+        pendingSeedRef.current = true;
+        // Retardo de encoder según el formato del audio (26 ms solo para MP3).
+        encoderDelayMsRef.current = getAudioEncoderDelayMs(result.audioPath ?? "");
 
         setHitObjects4K(normalized);
         setBeatmap(parsed);
@@ -192,7 +200,7 @@ export function BmsMiniPlayfieldPreview({
       }
 
       // Si el audio recién se carga o está en 0, calcular un tiempo visual fluido en base a performance.now()
-      let timeMs = 0;
+      let timeMs: number;
       
       if (currentAudioSec === 0 && notes.length > 0) {
         // Modo fallback: el audio aún no arranca. Loopear visualmente la preview.
@@ -210,21 +218,32 @@ export function BmsMiniPlayfieldPreview({
         }
 
         const elapsedSinceSync = (now - lastSyncPerfTimeRef.current) / 1000;
-        timeMs = (lastSyncAudioTimeRef.current + elapsedSinceSync) * 1000;
+        // Restar el encoder delay (según el formato del audio) para que el reloj del
+        // render coincida exactamente con las marcas de tiempo del beatmap, igual que el preview principal.
+        timeMs = (lastSyncAudioTimeRef.current + elapsedSinceSync) * 1000 - encoderDelayMsRef.current;
       }
 
       // Si el tiempo loopea hacia atrás o salta repentinamente
       if (timeMs < lastTimeMsRef.current - 400) {
         playEngineRef.current.reset();
+        pendingSeedRef.current = true;
       }
       lastTimeMsRef.current = timeMs;
 
-      // Actualizar el motor de juego (Autoplay procesará las notas y ejecutará hitsounds)
-      playEngineRef.current.updateAutoplay(
-        timeMs,
-        triggerHitSound,
-        hitsoundVolumeRef.current
-      );
+      // Solo procesar Autoplay cuando el audio tiene un reloj real (no en la carga/fallback),
+      // para no disparar hitsounds de la nada al cambiar de mapa. Los hitsounds solo suenan
+      // si el preview está reproduciéndose (no muteado); el juicio visual sigue activo.
+      if (currentAudioSec > 0) {
+        if (pendingSeedRef.current) {
+          playEngineRef.current.seedAutoplayCursor(timeMs);
+          pendingSeedRef.current = false;
+        }
+        playEngineRef.current.updateAutoplay(
+          timeMs,
+          isPlayingRef.current ? triggerHitSound : undefined,
+          hitsoundVolumeRef.current
+        );
+      }
 
       const playState = playEngineRef.current.getState();
       const currentScrollSpeed = scrollSpeedRef.current;
