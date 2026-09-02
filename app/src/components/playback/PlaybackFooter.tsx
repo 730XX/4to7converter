@@ -6,6 +6,7 @@ import type { PlaybackControls } from "../../lib/use-playback";
 import { formatTimeMs } from "../../preview/preview-math";
 import type { UiTimelineSection } from "../../lib/timeline-sections";
 import { TimelineSectionTrack } from "./TimelineSectionTrack";
+import { buildSpeedTimeline } from "../../preview/speed-timeline";
 
 /** Velocidades de desplazamiento cíclicas, multiplicando el reloj maestro. */
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2];
@@ -64,6 +65,11 @@ export function PlaybackFooter({
 
     return bins;
   }, [beatmap, playback.durationMs]);
+
+  const speedEvents = useMemo(
+    () => (beatmap ? buildSpeedTimeline(beatmap.timingPoints).events : []),
+    [beatmap],
+  );
 
   // Calcular intervalos de Kiai Time desde [TimingPoints]
   const kiaiIntervals = useMemo(() => {
@@ -229,6 +235,15 @@ export function PlaybackFooter({
           onClick={handleTimelineClick}
         >
           <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
+          {playback.durationMs > 0 && speedEvents.map((event) => (
+            <span
+              key={`${event.kind}-${event.timeMs}-${event.ordinal}`}
+              className={`timing-event-marker timing-event-marker--${event.kind}`}
+              style={{ left: `${Math.max(0, Math.min(100, (event.timeMs / playback.durationMs) * 100))}%` }}
+              title={event.kind === "bpm" ? `BPM ${Math.round(event.value ?? 0)}` : event.kind === "sv" ? `SV ${(event.value ?? 1).toFixed(2)}x` : event.kind === "stop" ? "STOP" : "Invalid timing"}
+              aria-label={event.kind === "bpm" ? `BPM ${Math.round(event.value ?? 0)}` : event.kind === "sv" ? `SV ${(event.value ?? 1).toFixed(2)}x` : event.kind === "stop" ? "STOP" : "Invalid timing"}
+            />
+          ))}
           <input
             className="preview-slider timeline-density-slider"
             type="range"

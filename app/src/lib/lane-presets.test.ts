@@ -36,10 +36,10 @@ describe("loadPresets", () => {
     expect(loadPresets(storage)).toEqual(DEFAULT_LANE_PRESETS);
   });
 
-  it("returns an empty list when the stored JSON is corrupt", () => {
+  it("returns default presets when the stored JSON is corrupt", () => {
     const storage = createMemoryStorage("not json{{{");
 
-    expect(loadPresets(storage)).toEqual([]);
+    expect(loadPresets(storage)).toEqual(DEFAULT_LANE_PRESETS);
   });
 
   it("drops invalid entries and keeps valid ones alongside defaults", () => {
@@ -123,7 +123,7 @@ describe("round-trip", () => {
 
     const loaded = loadPresets(storage);
 
-    expect(loaded).toEqual(withTwo);
+    expect(loaded).toEqual([...DEFAULT_LANE_PRESETS, ...withTwo]);
   });
 });
 

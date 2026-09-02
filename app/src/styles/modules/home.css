@@ -467,6 +467,7 @@
   gap: 10px;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
 }
 
@@ -806,10 +807,12 @@
 /* Tira de Miniaturas del Carrusel */
 .home-bms-thumbnails-strip {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  overflow-x: auto;
   padding: 6px 2px;
+  max-height: 190px;
+  overflow-y: auto;
 }
 
 .home-bms-thumbnails-strip::-webkit-scrollbar {
@@ -823,8 +826,8 @@
 
 .home-bms-thumb-item {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 54px;
+  height: 54px;
   border-radius: 6px;
   overflow: hidden;
   background: #090d14;
@@ -1119,6 +1122,20 @@
   height: 100%;
   flex: 1;
   display: block;
+}
+
+.home-bms-mini-speed {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  pointer-events: none;
 }
 
 .home-bms-mini-scanlines {

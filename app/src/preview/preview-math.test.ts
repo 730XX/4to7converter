@@ -9,6 +9,7 @@ import {
   isNoteVisible,
   type PlayfieldMetrics,
 } from "./preview-math";
+import { buildSpeedTimeline } from "./speed-timeline";
 
 /** Construye un hit circle con la columna y el tiempo dados. */
 function buildCircle(column: number, timeMs: number): HitObject {
@@ -41,11 +42,40 @@ describe("getNoteY", () => {
   it("places a note exactly at its impact time on the hit line", () => {
     expect(getNoteY(1000, 1000, 300, 0.2)).toBe(300);
   });
+
+  it("changes visible geometry when BPM or SV changes", () => {
+    const bpmTimeline = buildSpeedTimeline([
+      { offsetMs: 0, beatLength: 500, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: true, effects: 0 },
+      { offsetMs: 1000, beatLength: 250, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: true, effects: 0 },
+    ]);
+    const svTimeline = buildSpeedTimeline([
+      { offsetMs: 0, beatLength: 500, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: true, effects: 0 },
+      { offsetMs: 1000, beatLength: -50, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: false, effects: 0 },
+    ]);
+
+    expect(getNoteY(1500, 500, 300, 0.2, "down", bpmTimeline)).toBe(0);
+    expect(getNoteY(1500, 500, 300, 0.2, "down", svTimeline)).toBe(0);
+    expect(getNoteY(1500, 500, 300, 0.2)).toBe(100);
+  });
 });
 
 describe("getHoldEndY", () => {
   it("places a past hold tail below the hit line", () => {
     expect(getHoldEndY(0, 1000, 300, 0.2)).toBe(500);
+  });
+
+  it("uses integrated timeline distance for a long-note tail", () => {
+    const timeline = buildSpeedTimeline([
+      { offsetMs: 0, beatLength: 500, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: true, effects: 0 },
+      { offsetMs: 1000, beatLength: 250, meter: 4, sampleSet: 1, sampleIndex: 0, volume: 0, uninherited: true, effects: 0 },
+    ]);
+    expect(getHoldEndY(1500, 500, 300, 0.2, "down", timeline)).toBe(0);
+    expect(getHoldEndY(1500, 500, 300, 0.2, "up", timeline)).toBe(600);
+  });
+
+  it("keeps constant-speed behavior when no timeline is supplied", () => {
+    expect(getNoteY(1500, 500, 300, 0.2, "down")).toBe(100);
+    expect(getNoteY(1500, 500, 300, 0.2, "up")).toBe(500);
   });
 });
 

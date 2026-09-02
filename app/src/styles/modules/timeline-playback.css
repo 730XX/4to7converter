@@ -62,6 +62,32 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
+  z-index: 2;
+}
+
+.timing-event-marker {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 4px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.timing-event-marker--bpm {
+  background: #ef4444;
+}
+
+.timing-event-marker--sv {
+  background: #22c55e;
+}
+
+.timing-event-marker--stop {
+  background: #22c55e;
+}
+
+.timing-event-marker--invalid {
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .timeline-density-slider {

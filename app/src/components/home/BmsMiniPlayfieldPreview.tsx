@@ -7,6 +7,7 @@ import { getAudioEncoderDelayMs } from "../../lib/audio";
 import { PlayEngine } from "../../preview/play-engine";
 import { buildPlayfieldPalette, drawPlayfieldFrame, type PlayfieldPalette } from "../../preview/renderer";
 import { loadAllSkinTextures, type LoadedSkinTextures } from "../../preview/skin-manager";
+import { buildSpeedTimeline, type SpeedTimeline } from "../../preview/speed-timeline";
 
 interface BmsMiniPlayfieldPreviewProps {
   beatmapPath: string | null;
@@ -46,6 +47,8 @@ export function BmsMiniPlayfieldPreview({
   const paletteRef = useRef<PlayfieldPalette>(buildPlayfieldPalette(4));
   const hitObjects4KRef = useRef<HitObject[]>([]);
   const customSkinRef = useRef<LoadedSkinTextures | null>(null);
+  const speedTimelineRef = useRef<SpeedTimeline>(buildSpeedTimeline([]));
+  const speedLabelRef = useRef<HTMLDivElement | null>(null);
 
   // Refs reactivos para el bucle de renderizado a 60FPS
   const scrollSpeedRef = useRef<number>(scrollSpeed);
@@ -111,6 +114,7 @@ export function BmsMiniPlayfieldPreview({
     if (!beatmapPath) {
       setBeatmap(null);
       setHitObjects4K([]);
+      speedTimelineRef.current = buildSpeedTimeline([]);
       return;
     }
 
@@ -123,6 +127,7 @@ export function BmsMiniPlayfieldPreview({
         if (isCancelled) return;
 
         const parsed = parseOsuFile(result.content);
+        speedTimelineRef.current = buildSpeedTimeline(parsed.timingPoints);
         
         // Normalizar todas las notas a 4 columnas
         const normalized: HitObject[] = parsed.hitObjects.map((obj) => ({
@@ -248,6 +253,15 @@ export function BmsMiniPlayfieldPreview({
       const playState = playEngineRef.current.getState();
       const currentScrollSpeed = scrollSpeedRef.current;
       const currentScrollDirection = scrollDirectionRef.current;
+      const speedState = speedTimelineRef.current.stateAt(timeMs);
+      if (speedLabelRef.current) {
+        if (speedState.mode === "stop") {
+          speedLabelRef.current.textContent = "STOP  Visual scroll paused";
+        } else {
+          const bpmLabel = speedState.bpm > 0 ? `BPM ${Math.round(speedState.bpm)}` : "BPM --";
+          speedLabelRef.current.textContent = `${bpmLabel}  SV ${speedState.svMultiplier.toFixed(2)}x`;
+        }
+      }
       const approachMs = Math.round(17500 / Math.max(currentScrollSpeed, 5));
 
       drawPlayfieldFrame(
@@ -279,6 +293,7 @@ export function BmsMiniPlayfieldPreview({
           hitPositionOffset: hitPositionOffsetRef.current,
           receptorOffset: receptorOffsetRef.current,
           customSkinTextures: customSkinRef.current,
+          speedTimeline: speedTimelineRef.current,
           isCompleted: false,
         }
       );
@@ -316,6 +331,7 @@ export function BmsMiniPlayfieldPreview({
       title="Click para abrir en el editor"
     >
       <canvas ref={canvasRef} className="home-bms-mini-canvas" />
+      <div ref={speedLabelRef} className="home-bms-mini-speed mono">BPM --  SV 1.00x</div>
 
       {isLoading && (
         <div className="home-bms-mini-loading mono">

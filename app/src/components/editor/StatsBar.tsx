@@ -7,6 +7,7 @@ import {
   getKiaiIntervals,
   evaluateDynamicRhythm,
 } from "../../preview/beat-grid";
+import { buildSpeedTimeline } from "../../preview/speed-timeline";
 
 interface StatsBarProps {
   source: OsuBeatmap;
@@ -22,11 +23,13 @@ interface StatsBarProps {
 export function StatsBar({ source, converted, issueCounts, playback }: StatsBarProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bpmTextRef = useRef<HTMLSpanElement | null>(null);
+  const speedTextRef = useRef<HTMLSpanElement | null>(null);
   const kiaiTagRef = useRef<HTMLDivElement | null>(null);
   const beatBoxesRef = useRef<(HTMLDivElement | null)[]>([]);
 
   const timingPoints = source?.timingPoints ?? [];
   const timingSections = useMemo(() => getTimingSections(timingPoints), [timingPoints]);
+  const speedTimeline = useMemo(() => buildSpeedTimeline(timingPoints), [timingPoints]);
   const kiaiIntervals = useMemo(
     () => getKiaiIntervals(timingPoints, playback?.durationMs ?? 3600000),
     [timingPoints, playback?.durationMs],
@@ -45,7 +48,8 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
         curTime,
       );
 
-      if (containerRef.current && currentBpm > 0) {
+      const speedState = speedTimeline.stateAt(curTime);
+      if (containerRef.current && speedState.mode !== "invalid") {
         containerRef.current.style.display = "inline-flex";
 
         if (isInKiai) {
@@ -55,7 +59,14 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
         }
 
         if (bpmTextRef.current) {
-          bpmTextRef.current.textContent = `${currentBpm} BPM`;
+          bpmTextRef.current.textContent = speedState.mode === "stop"
+            ? "STOP"
+            : `${Math.round(speedState.bpm || currentBpm)} BPM`;
+        }
+        if (speedTextRef.current) {
+          speedTextRef.current.textContent = speedState.mode === "stop"
+            ? "Visual scroll paused"
+            : `SV ${speedState.svMultiplier.toFixed(2)}x`;
         }
 
         if (kiaiTagRef.current) {
@@ -103,7 +114,7 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
 
     animId = requestAnimationFrame(renderMetronome);
     return () => cancelAnimationFrame(animId);
-  }, [timingSections, kiaiIntervals, playback]);
+  }, [timingSections, kiaiIntervals, playback, speedTimeline]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", width: "100%" }}>
@@ -120,6 +131,7 @@ export function StatsBar({ source, converted, issueCounts, playback }: StatsBarP
         <div className="rhythm-capsule-bpm">
           <Activity size={14} className="rhythm-capsule-icon" />
           <span ref={bpmTextRef} className="rhythm-bpm-value">0 BPM</span>
+          <span ref={speedTextRef} className="rhythm-bpm-value">SV 1.00x</span>
         </div>
 
         {/* 4 Cuadritos de Beat */}

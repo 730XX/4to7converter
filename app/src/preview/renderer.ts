@@ -9,6 +9,7 @@ import {
 } from "./preview-math";
 import type { HitErrorEvent, JudgementEvent } from "./play-engine";
 import { HIT_WINDOW_MS } from "./play-engine";
+import type { SpeedTimeline } from "./speed-timeline";
 
 /** Espacio vacío en la parte superior del playfield donde aparecen las notas. */
 export const PLAYFIELD_TOP_PADDING = 60;
@@ -213,6 +214,7 @@ export interface PlayfieldFrameOptions {
   hitPositionOffset?: number;
   receptorOffset?: number;
   customSkinTextures?: LoadedSkinTextures | null;
+  speedTimeline?: SpeedTimeline;
 }
 
 /**
@@ -252,6 +254,7 @@ export function drawPlayfieldFrame(
   let hitPositionOffset = PLAYFIELD_HIT_LINE_OFFSET;
   let receptorOffset = 0;
   let customSkinTextures: LoadedSkinTextures | null = null;
+  let speedTimeline: SpeedTimeline | undefined;
 
   if (typeof options === "object") {
     approachMs = options.approachMs ?? PLAYFIELD_APPROACH_MS;
@@ -274,6 +277,7 @@ export function drawPlayfieldFrame(
     hitPositionOffset = options.hitPositionOffset ?? PLAYFIELD_HIT_LINE_OFFSET;
     receptorOffset = options.receptorOffset ?? 0;
     customSkinTextures = options.customSkinTextures ?? null;
+    speedTimeline = options.speedTimeline;
   } else if (typeof options === "number") {
     approachMs = options;
   }
@@ -337,6 +341,7 @@ export function drawPlayfieldFrame(
     holdingLnIndices,
     noteHeight,
     customSkinTextures,
+    speedTimeline,
   );
   drawHitLine(
     ctx,
@@ -591,6 +596,7 @@ function drawNotes(
   holdingLnIndices: Set<number> | null = null,
   noteHeight: number = 16,
   customSkinTextures: LoadedSkinTextures | null = null,
+  speedTimeline?: SpeedTimeline,
 ): void {
   const speedPxPerMs =
     scrollDirection === "down"
@@ -603,7 +609,7 @@ function drawNotes(
   const topBound = 0;
   const bottomBound = metrics.height;
 
-  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection);
+  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection, speedTimeline);
 
   for (let i = startIndex; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
@@ -622,6 +628,7 @@ function drawNotes(
       metrics.hitLineY,
       speedPxPerMs,
       scrollDirection,
+      speedTimeline,
     );
 
     const endY =
@@ -633,6 +640,7 @@ function drawNotes(
             metrics.hitLineY,
             speedPxPerMs,
             scrollDirection,
+            speedTimeline,
           );
 
     if (!isNoteVisible(noteY, endY, topBound, bottomBound)) {
@@ -933,7 +941,7 @@ function drawJudgement(
 
   let textColor = "#38bdf8";
   let glowColor = "rgba(56, 189, 248, 0.8)";
-  let label = judgement.tier;
+  const label = judgement.tier;
 
   switch (judgement.tier) {
     case "MAX": textColor = "#38bdf8"; glowColor = "rgba(56, 189, 248, 0.85)"; break;

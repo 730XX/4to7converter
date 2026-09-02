@@ -9,6 +9,7 @@ import {
 import { PlayEngine } from "../../preview/play-engine";
 import { DEFAULT_KEYBINDS_7K } from "../../lib/settings";
 import type { LoadedSkinTextures } from "../../preview/skin-manager";
+import { buildSpeedTimeline, type SpeedTimeline } from "../../preview/speed-timeline";
 
 interface PlayfieldProps {
   beatmap?: OsuBeatmap | null;
@@ -275,6 +276,8 @@ function SinglePlayfieldCanvas({
   const hitPositionOffsetRef = useRef(hitPositionOffset);
   const receptorOffsetRef = useRef(receptorOffset);
   const customSkinTexturesRef = useRef(customSkinTextures);
+  const speedTimeline = useMemo(() => buildSpeedTimeline(beatmap.timingPoints), [beatmap.timingPoints]);
+  const speedTimelineRef = useRef<SpeedTimeline>(speedTimeline);
   const onExitPlayModeRef = useRef(onExitPlayMode);
   const rafIdRef = useRef<number | null>(null);
 
@@ -299,6 +302,7 @@ function SinglePlayfieldCanvas({
   hitPositionOffsetRef.current = hitPositionOffset;
   receptorOffsetRef.current = receptorOffset;
   customSkinTexturesRef.current = customSkinTextures;
+  speedTimelineRef.current = speedTimeline;
   onExitPlayModeRef.current = onExitPlayMode;
 
   useEffect(() => {
@@ -488,6 +492,7 @@ function SinglePlayfieldCanvas({
         hitPositionOffset: isPlayModeRef.current ? hitPositionOffsetRef.current : 40,
         receptorOffset: receptorOffsetRef.current,
         customSkinTextures: customSkinTexturesRef.current,
+        speedTimeline: speedTimelineRef.current,
         isCompleted:
           isPlayModeRef.current &&
           playback.durationMs > 0 &&

@@ -1,4 +1,5 @@
 import type { HitObject } from "../../../src/core/osu/types";
+import type { SpeedTimeline } from "./speed-timeline";
 
 /** Margen de visibilidad en píxeles por encima y por debajo del playfield. */
 const VISIBILITY_MARGIN = 40;
@@ -31,8 +32,11 @@ export function getNoteY(
   hitLineY: number,
   speedPxPerMs: number,
   scrollDirection: "down" | "up" = "down",
+  speedTimeline?: SpeedTimeline,
 ): number {
-  const diff = (hitTimeMs - currentTimeMs) * speedPxPerMs;
+  const diff = speedTimeline
+    ? speedTimeline.distanceBetween(currentTimeMs, hitTimeMs) * speedPxPerMs
+    : (hitTimeMs - currentTimeMs) * speedPxPerMs;
   return scrollDirection === "down" ? hitLineY - diff : hitLineY + diff;
 }
 
@@ -42,8 +46,11 @@ export function getHoldEndY(
   hitLineY: number,
   speedPxPerMs: number,
   scrollDirection: "down" | "up" = "down",
+  speedTimeline?: SpeedTimeline,
 ): number {
-  const diff = (endTimeMs - currentTimeMs) * speedPxPerMs;
+  const diff = speedTimeline
+    ? speedTimeline.distanceBetween(currentTimeMs, endTimeMs) * speedPxPerMs
+    : (endTimeMs - currentTimeMs) * speedPxPerMs;
   return scrollDirection === "down" ? hitLineY - diff : hitLineY + diff;
 }
 
@@ -89,6 +96,7 @@ export function getVisibleHitObjects(
   currentTimeMs: number,
   metrics: PlayfieldMetrics,
   scrollDirection: "down" | "up" = "down",
+  speedTimeline?: SpeedTimeline,
 ): HitObject[] {
   const speedPxPerMs =
     scrollDirection === "down"
@@ -99,7 +107,7 @@ export function getVisibleHitObjects(
   const bottomBound = metrics.height + VISIBILITY_MARGIN;
   const visible: HitObject[] = [];
 
-  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection);
+  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection, speedTimeline);
 
   for (let i = startIndex; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
@@ -111,6 +119,7 @@ export function getVisibleHitObjects(
       metrics.hitLineY,
       speedPxPerMs,
       scrollDirection,
+      speedTimeline,
     );
     const endY =
       hitObject.endTimeMs === null
@@ -121,6 +130,7 @@ export function getVisibleHitObjects(
             metrics.hitLineY,
             speedPxPerMs,
             scrollDirection,
+            speedTimeline,
           );
 
     if (isNoteVisible(noteY, endY, topBound, bottomBound)) {
@@ -140,6 +150,7 @@ export function findFirstVisibleNoteIndex(
   currentTimeMs: number,
   metrics: PlayfieldMetrics,
   _scrollDirection: "down" | "up" = "down",
+  speedTimeline?: SpeedTimeline,
 ): number {
   if (hitObjects.length === 0) return 0;
 
@@ -147,6 +158,23 @@ export function findFirstVisibleNoteIndex(
   // approachMs es el tiempo que tarda desde la cima hasta la línea de golpe.
   // Además, dejamos un margen extra de 2000ms para asegurar que las Long Notes o notas retrasadas no desaparezcan.
   const timeMargin = metrics.approachMs + 2000;
+  // STOP puede dejar una nota visible indefinidamente. Las LNs también pueden
+  // tener una cabeza muy antigua y una cola todavía visible, así que se conserva
+  // el escaneo completo en esos casos para no perder geometría válida.
+  if (speedTimeline) {
+    if (speedTimeline.hasStops || hitObjects.some((note) => note.endTimeMs !== null)) return 0;
+
+    const lowerDistance = -metrics.hitLineY - VISIBILITY_MARGIN;
+    let left = 0;
+    let right = hitObjects.length;
+    while (left < right) {
+      const middle = left + Math.floor((right - left) / 2);
+      const note = hitObjects[middle]!;
+      if (speedTimeline.distanceBetween(currentTimeMs, note.timeMs) >= lowerDistance) right = middle;
+      else left = middle + 1;
+    }
+    return left;
+  }
   const targetTime = currentTimeMs - timeMargin;
 
   let left = 0;
