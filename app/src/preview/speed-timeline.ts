@@ -24,6 +24,8 @@ export interface SpeedTimeline {
   readonly events: readonly SpeedTimelineEvent[];
   readonly referenceBpm: number | null;
   readonly hasStops: boolean;
+  /** Maximum visual speed factor across the entire timeline (for worst-case window calculations). */
+  readonly maxSpeedFactor: number;
 }
 
 const DEFAULT_STATE: SpeedTimelineState = { bpm: 0, svMultiplier: 1, mode: "invalid" };
@@ -41,6 +43,18 @@ function upperBound<T>(items: readonly T[], value: number, getValue: (item: T) =
   while (low < high) {
     const middle = low + Math.floor((high - low) / 2);
     if (getValue(items[middle]!) <= value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/** First index where getValue(item) >= value. */
+function lowerBound<T>(items: readonly T[], value: number, getValue: (item: T) => number): number {
+  let low = 0;
+  let high = items.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    if (getValue(items[middle]!) < value) low = middle + 1;
     else high = middle;
   }
   return low;
@@ -159,15 +173,27 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
     return cumulativeDistanceAt(endMs) - cumulativeDistanceAt(startMs);
   };
 
+  // Precompute max speed factor across all segments for worst-case window calculations
+  let maxFactor = 1;
+  for (const seg of segments) {
+    if (seg.factor > maxFactor) maxFactor = seg.factor;
+  }
+  const computedHasStops = events.some((event) => event.kind === "stop");
+
   return {
     speedAt,
     distanceBetween,
     stateAt,
-    eventsBetween: (startMs = -Infinity, endMs = Infinity) =>
-      events.filter((event) => event.timeMs >= startMs && event.timeMs <= endMs),
+    eventsBetween: (startMs = -Infinity, endMs = Infinity) => {
+      if (events.length === 0) return [];
+      const from = lowerBound(events, startMs, (e) => e.timeMs);
+      const to = upperBound(events, endMs, (e) => e.timeMs);
+      return events.slice(from, to);
+    },
     events,
     referenceBpm,
-    hasStops: events.some((event) => event.kind === "stop"),
+    hasStops: computedHasStops,
+    maxSpeedFactor: maxFactor,
   };
 }
 

@@ -298,11 +298,98 @@ fn find_difficulty_field(content: &str, field: &str) -> Option<String> {
     None
 }
 
+fn count_hit_objects(content: &str) -> usize {
+    let mut in_hit_objects = false;
+    let mut count = 0;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            if in_hit_objects {
+                break;
+            }
+            in_hit_objects = trimmed.eq_ignore_ascii_case("[HitObjects]");
+            continue;
+        }
+        if in_hit_objects && !trimmed.is_empty() {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn extract_difficulty_rank(version: &str, hit_objects: usize, od: f32) -> f64 {
+    let lower = version.to_lowercase();
+
+    // 1. Tiers por palabras clave reconocidas en osu! y rhythm games
+    let mut keyword_base = 0.0;
+    if lower.contains("beginner")
+        || lower.contains("novice")
+        || lower.contains("easy")
+        || lower.contains("ez")
+        || lower.contains("simple")
+        || lower.contains("basic")
+    {
+        keyword_base = 10_000.0;
+    } else if lower.contains("normal")
+        || lower.contains("nm")
+        || lower.contains("medium")
+        || lower.contains("standard")
+        || lower.contains("advanced")
+    {
+        keyword_base = 20_000.0;
+    } else if lower.contains("hard")
+        || lower.contains("hd")
+        || lower.contains("hyper")
+    {
+        keyword_base = 30_000.0;
+    } else if lower.contains("insane")
+        || lower.contains("another")
+        || lower.contains("mx")
+        || lower.contains("maximum")
+        || lower.contains("lunatic")
+    {
+        keyword_base = 40_000.0;
+    } else if lower.contains("expert")
+        || lower.contains("extra")
+        || lower.contains("ex")
+        || lower.contains("master")
+        || lower.contains("overdose")
+        || lower.contains("sc")
+        || lower.contains("shd")
+        || lower.contains("black another")
+        || lower.contains("hell")
+        || lower.contains("ultra")
+        || lower.contains("final")
+    {
+        keyword_base = 50_000.0;
+    }
+
+    // 2. Detección de niveles numéricos explícitos (ej: Lv.1, Level 5, 2.5*, 4★)
+    let mut numeric_level = 0.0;
+    for part in lower.split(|c: char| !c.is_alphanumeric() && c != '.' && c != '★') {
+        let clean = part.trim_start_matches("lv").trim_start_matches("lvl").trim_end_matches('★').trim_end_matches('*');
+        if let Ok(num) = clean.parse::<f64>() {
+            if num > 0.0 && num <= 100.0 {
+                numeric_level = num;
+                break;
+            }
+        }
+    }
+
+    if keyword_base > 0.0 {
+        keyword_base + (numeric_level * 50.0) + (hit_objects as f64) + ((od as f64) * 10.0)
+    } else if numeric_level > 0.0 {
+        (numeric_level * 2_000.0) + (hit_objects as f64) + ((od as f64) * 10.0)
+    } else {
+        (hit_objects as f64) * 5.0 + ((od as f64) * 100.0)
+    }
+}
+
 #[tauri::command]
 fn list_beatmap_difficulties(path: String) -> Result<Vec<BeatmapDiffItem>, String> {
     let p = Path::new(&path);
     let parent = p.parent().ok_or_else(|| "No se pudo obtener el directorio del archivo".to_string())?;
-    let mut diffs = Vec::new();
+    let mut diffs_with_rank: Vec<(BeatmapDiffItem, f64)> = Vec::new();
 
     if let Ok(entries) = std::fs::read_dir(parent) {
         for entry in entries.flatten() {
@@ -321,14 +408,21 @@ fn list_beatmap_difficulties(path: String) -> Result<Vec<BeatmapDiffItem>, Strin
                             let mode: u8 = mode_str.parse().unwrap_or(0);
                             let cs_str = find_difficulty_field(&content, "CircleSize").unwrap_or_default();
                             let key_count: u8 = cs_str.parse().unwrap_or(4);
+                            let od_str = find_difficulty_field(&content, "OverallDifficulty").unwrap_or_default();
+                            let od: f32 = od_str.parse().unwrap_or(7.0);
+                            let hit_objects = count_hit_objects(&content);
+                            let rank = extract_difficulty_rank(&version, hit_objects, od);
 
-                            diffs.push(BeatmapDiffItem {
-                                path: entry_path.to_string_lossy().into_owned(),
-                                file_name: entry.file_name().to_string_lossy().into_owned(),
-                                version,
-                                mode,
-                                key_count,
-                            });
+                            diffs_with_rank.push((
+                                BeatmapDiffItem {
+                                    path: entry_path.to_string_lossy().into_owned(),
+                                    file_name: entry.file_name().to_string_lossy().into_owned(),
+                                    version,
+                                    mode,
+                                    key_count,
+                                },
+                                rank,
+                            ));
                         }
                     }
                 }
@@ -336,8 +430,16 @@ fn list_beatmap_difficulties(path: String) -> Result<Vec<BeatmapDiffItem>, Strin
         }
     }
 
-    diffs.sort_by(|a, b| a.version.to_lowercase().cmp(&b.version.to_lowercase()));
-    Ok(diffs)
+    // Ordenar de más fácil a más difícil (primero agrupado por key_count, luego por score de dificultad)
+    diffs_with_rank.sort_by(|(a, rank_a), (b, rank_b)| {
+        if a.key_count != b.key_count {
+            return a.key_count.cmp(&b.key_count);
+        }
+        rank_a.partial_cmp(rank_b).unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.version.to_lowercase().cmp(&b.version.to_lowercase()))
+    });
+
+    Ok(diffs_with_rank.into_iter().map(|(item, _)| item).collect())
 }
 
 #[derive(Serialize, Clone, Debug)]

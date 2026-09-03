@@ -578,6 +578,30 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  z-index: 4;
+}
+
+.home-bms-jacket-visualizer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 35%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.98) 0%,
+    rgba(0, 0, 0, 0.92) 25%,
+    rgba(0, 0, 0, 0.70) 50%,
+    rgba(0, 0, 0, 0.35) 75%,
+    rgba(0, 0, 0, 0.10) 90%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 3;
+  padding-bottom: 6px;
 }
 
 .home-bms-key-badge {
@@ -589,9 +613,10 @@
 }
 
 .home-bms-key-badge.is-4k {
-  color: #38bdf8;
+  color: var(--bms-accent, #38bdf8);
   background: rgba(0, 0, 0, 0.75);
-  border: 1px solid #38bdf8;
+  border: 1px solid var(--bms-accent, #38bdf8);
+  transition: all 0.3s ease;
 }
 
 .home-bms-key-badge.is-7k {
@@ -635,13 +660,14 @@
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.12em;
-  color: #38bdf8;
+  color: var(--bms-accent, #38bdf8);
+  transition: color 0.3s ease;
 }
 
-.home-bms-audio-controls {
+.home-bms-top-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .home-bms-visualizer-canvas {
@@ -650,33 +676,238 @@
 }
 
 .home-bms-audio-toggle {
-  background: transparent;
-  border: none;
-  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
   font-size: 0.65rem;
-  color: #64748b;
+  color: #94a3b8;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .home-bms-audio-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
 }
 
 .home-bms-audio-toggle.is-playing {
   color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.1);
 }
 
 .home-bms-audio-toggle.is-muted {
   color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
 }
 
-.home-bms-audio-toggle:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+/* ==========================================================================
+   Reproductor Compacto con Visualizador y Scrubber estilo YouTube
+   ========================================================================== */
+
+.home-bms-player-block {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  /* gap: 6px; */
+  /* background: rgba(0, 0, 0, 0.35); */
+  /* border: 1px solid rgba(255, 255, 255, 0.06); */
+  border-radius: 8px;
+  /* padding: 8px 12px; */
+}
+
+.home-bms-player-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.home-bms-player-times {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.home-bms-time-current {
+  color: var(--bms-accent, #38bdf8);
+  transition: color 0.3s ease;
+}
+
+.home-bms-time-sep {
+  color: #475569;
+}
+
+.home-bms-time-total {
+  color: #94a3b8;
+}
+
+/* Línea de reproducción YouTube Scrubber con Onda de Densidad NPS */
+.home-bms-scrubber {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  padding-bottom: 2px;
+}
+
+.home-bms-nps-wave-container {
+  width: 100%;
+  height: 20px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0;
+  pointer-events: none;
+  line-height: 0;
+  display: block;
+}
+
+.home-bms-nps-wave-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  vertical-align: bottom;
+}
+
+.home-bms-nps-wave-bg {
+  fill: rgba(255, 255, 255, 0.04);
+  transition: fill 0.2s ease;
+}
+
+.home-bms-nps-wave-bg-stroke {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 1px;
+}
+
+.home-bms-scrubber:hover .home-bms-nps-wave-bg {
+  fill: rgba(255, 255, 255, 0.08);
+}
+
+.home-bms-scrubber:hover .home-bms-nps-wave-bg-stroke {
+  stroke: rgba(255, 255, 255, 0.28);
+}
+
+.home-bms-nps-wave-fill {
+  transition: opacity 0.2s ease;
+}
+
+.home-bms-nps-wave-stroke {
+  fill: none;
+  stroke-width: 1.6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Tooltip interactivo flotante al hacer hover */
+.home-bms-scrubber-tooltip {
+  position: absolute;
+  top: -24px;
+  transform: translateX(-50%);
+  background: rgba(10, 14, 22, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: bmsTooltipFade 0.1s ease-out;
+}
+
+@keyframes bmsTooltipFade {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.home-bms-tooltip-time {
+  color: #f1f5f9;
+}
+
+.home-bms-tooltip-sep {
+  color: #64748b;
+}
+
+.home-bms-tooltip-nps {
+  color: var(--bms-accent, #38bdf8);
+}
+
+.home-bms-scrubber-hover-line {
+  position: absolute;
+  top: 8px;
+  bottom: 2px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.home-bms-scrubber-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  position: relative;
+  overflow: visible;
+  transition: height 0.15s ease;
+}
+
+.home-bms-scrubber:hover .home-bms-scrubber-track {
+  height: 6px;
+}
+
+.home-bms-scrubber-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--bms-accent, #38bdf8), var(--bms-accent-edge, #818cf8));
+  border-radius: 999px;
+  transition: width 0.08s linear;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.home-bms-scrubber-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  transform: scale(0);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  margin-right: -6px;
+  flex-shrink: 0;
+}
+
+.home-bms-scrubber:hover .home-bms-scrubber-thumb {
+  transform: scale(1);
 }
 
 .home-bms-audio-toggle.is-playing {
@@ -734,13 +965,14 @@
 }
 
 .home-bms-diff-badge {
-  color: #38bdf8;
+  color: var(--bms-accent, #38bdf8);
   font-size: 0.78rem;
   font-weight: 700;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: var(--bms-accent-bg, rgba(56, 189, 248, 0.12));
+  border: 1px solid var(--bms-accent-border, rgba(56, 189, 248, 0.3));
   padding: 1px 6px;
   border-radius: 4px;
+  transition: all 0.3s ease;
 }
 
 .home-bms-timestamp {
@@ -767,14 +999,14 @@
   font-size: 0.84rem;
   font-weight: 700;
   color: #ffffff;
-  background: rgba(56, 189, 248, 0.18);
-  border: 1px solid rgba(56, 189, 248, 0.5);
+  background: var(--bms-accent-bg, rgba(56, 189, 248, 0.18));
+  border: 1px solid var(--bms-accent-border, rgba(56, 189, 248, 0.5));
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .home-bms-load-btn:hover {
-  background: #38bdf8;
+  background: var(--bms-accent, #38bdf8);
   color: #06080d;
 }
 

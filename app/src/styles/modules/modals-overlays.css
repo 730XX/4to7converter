@@ -963,12 +963,32 @@
 }
 
 .quick-diff-list {
-  max-height: 380px;
+  max-height: min(440px, 70vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   padding: 6px;
   gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.quick-diff-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.quick-diff-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quick-diff-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+}
+
+.quick-diff-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .quick-diff-row {

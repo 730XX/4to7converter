@@ -597,6 +597,12 @@ export function SettingsDrawer({
                     step={SETTINGS_LIMITS.volume.step}
                     value={volume}
                     onChange={(e) => update("volume", Number(e.target.value))}
+                    onWheel={(e) => {
+                      const dir = e.deltaY < 0 ? 1 : -1;
+                      let next = volume + dir * 5;
+                      next = Math.max(SETTINGS_LIMITS.volume.min, Math.min(SETTINGS_LIMITS.volume.max, next));
+                      update("volume", next);
+                    }}
                     className="settings-slider"
                   />
                 </div>
@@ -631,6 +637,13 @@ export function SettingsDrawer({
                       step={SETTINGS_LIMITS.hitsoundVolume.step}
                       value={settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default}
                       onChange={(e) => update("hitsoundVolume", Number(e.target.value))}
+                      onWheel={(e) => {
+                        const dir = e.deltaY < 0 ? 1 : -1;
+                        const current = settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default;
+                        let next = current + dir * 5;
+                        next = Math.max(SETTINGS_LIMITS.hitsoundVolume.min, Math.min(SETTINGS_LIMITS.hitsoundVolume.max, next));
+                        update("hitsoundVolume", next);
+                      }}
                       className="settings-slider"
                     />
                   </div>

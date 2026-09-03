@@ -52,7 +52,7 @@ export function BrandHeader({
               className="home-osu-load-trigger"
               title="Click para cargar el beatmap activo de osu!"
             >
-              <span className="home-osu-load-label">Cargar de osu!:</span>
+              <span className="home-osu-load-label">Cargar: </span>
               <span className="home-osu-song-name">
                 {detectedMap.title || detectedMap.folder_name}
               </span>
@@ -76,11 +76,10 @@ export function BrandHeader({
           <button
             type="button"
             onClick={onOpenSettings}
-            title="Ajustes (Ctrl + O)"
+            title="Ajustes"
             className="home-settings-btn"
           >
             <Settings size={15} className="home-settings-icon" />
-            <span className="mono home-settings-shortcut">Ctrl + O</span>
           </button>
         )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +14,13 @@ import {
 import { formatTimeAgo, type RecentBeatmapItem } from "../../lib/recent-beatmaps";
 import { isTauri, loadBeatmapWithAudio, toAssetUrl, toAudioUrl } from "../../lib/native";
 import { getAudioEncoderDelayMs } from "../../lib/audio";
-import { AudioVisualizer } from "./AudioVisualizer";
+import { AudioVisualizer, type VisualizerPalette } from "./AudioVisualizer";
+import {
+  calculateNpsDensity,
+  extractHitObjectTimes,
+  generateSmoothSvgPath,
+  type NpsDensityData,
+} from "../../lib/nps-density";
 
 type ViewLayoutMode = "grid3" | "grid2" | "bms";
 
@@ -60,11 +66,22 @@ export function RecentBeatmaps({
   });
 
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [bmsPalette, setBmsPalette] = useState<VisualizerPalette | null>(null);
   const [isPreviewMuted, setIsPreviewMuted] = useState(false);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(0);
+  const [rawHitObjectTimes, setRawHitObjectTimes] = useState<number[]>([]);
+  const [npsData, setNpsData] = useState<NpsDensityData | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<{
+    timeSec: number;
+    nps: number;
+    percent: number;
+  } | null>(null);
   const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fadeIntervalRef = useRef<number | null>(null);
+  const isDraggingScrubberRef = useRef(false);
 
   // Inicializar Audio una sola vez
   useEffect(() => {
@@ -72,6 +89,22 @@ export function RecentBeatmaps({
       const audio = new Audio();
       audio.loop = true;
       audio.crossOrigin = "anonymous";
+
+      const handleTimeUpdate = () => {
+        if (!isDraggingScrubberRef.current) {
+          setCurrentTimeSec(audio.currentTime);
+        }
+      };
+      const handleDurationChange = () => {
+        if (Number.isFinite(audio.duration)) {
+          setDurationSec(audio.duration);
+        }
+      };
+
+      audio.addEventListener("timeupdate", handleTimeUpdate);
+      audio.addEventListener("durationchange", handleDurationChange);
+      audio.addEventListener("loadedmetadata", handleDurationChange);
+
       audioRef.current = audio;
       setAudioEl(audio);
     }
@@ -122,7 +155,12 @@ export function RecentBeatmaps({
         audioRef.current.pause();
         audioRef.current.src = "";
         setIsPlayingPreview(false);
+        setCurrentTimeSec(0);
+        setDurationSec(0);
       }
+      setRawHitObjectTimes([]);
+      setNpsData(null);
+      setHoverInfo(null);
       return;
     }
 
@@ -141,6 +179,8 @@ export function RecentBeatmaps({
         if (isCancelled || !result.audioPath) return;
 
         const previewSec = extractPreviewTime(result.content);
+        const times = extractHitObjectTimes(result.content);
+        setRawHitObjectTimes(times);
         const audioUrl = toAudioUrl(result.audioPath);
 
         // Crear o reutilizar elemento Audio
@@ -160,13 +200,19 @@ export function RecentBeatmaps({
         // Esperar metadatos para saltar al PreviewTime
         const onLoadedMetadata = () => {
           if (isCancelled) return;
+          if (Number.isFinite(audio.duration)) {
+            setDurationSec(audio.duration);
+          }
           // Validar que el duration es un número válido y mayor a 0
           if (previewSec > 0 && Number.isFinite(audio.duration) && previewSec < audio.duration) {
             // Sumar el encoder delay (según formato del audio) para que el tiempo de
             // partida quede alineado con el reloj del beatmap (igual que el preview principal).
-            audio.currentTime = previewSec + getAudioEncoderDelayMs(result.audioPath ?? "") / 1000;
+            const startSec = previewSec + getAudioEncoderDelayMs(result.audioPath ?? "") / 1000;
+            audio.currentTime = startSec;
+            setCurrentTimeSec(startSec);
           } else {
             audio.currentTime = 0;
+            setCurrentTimeSec(0);
           }
 
           void audio.play().then(() => {
@@ -202,6 +248,59 @@ export function RecentBeatmaps({
       }
     };
   }, [layoutMode, activeBmsMap?.path]);
+
+  // Calcular la curva de densidad NPS cuando la duración y las notas del beatmap estén listas
+  useEffect(() => {
+    if (durationSec > 0 && rawHitObjectTimes.length > 0) {
+      const data = calculateNpsDensity(rawHitObjectTimes, durationSec, 80);
+      setNpsData(data);
+    } else {
+      setNpsData(null);
+    }
+  }, [durationSec, rawHitObjectTimes]);
+
+  // Generar las trayectorias SVG continuas (Bézier Spline)
+  const svgPaths = useMemo(() => {
+    if (!npsData || npsData.normalizedPoints.length === 0) return null;
+    return generateSmoothSvgPath(npsData.normalizedPoints, 1000, 20);
+  }, [npsData]);
+
+  function handleScrubberSeek(e: React.MouseEvent<HTMLDivElement>) {
+    if (!audioRef.current || durationSec <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const targetPercent = clickX / rect.width;
+    const targetTime = targetPercent * durationSec;
+    audioRef.current.currentTime = targetTime;
+    setCurrentTimeSec(targetTime);
+  }
+
+  function handleScrubberMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (durationSec <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetTime = percent * durationSec;
+
+    let nps = 0;
+    if (npsData && npsData.rawNpsPoints.length > 0) {
+      const sampleIdx = Math.min(
+        npsData.rawNpsPoints.length - 1,
+        Math.max(0, Math.floor(percent * npsData.rawNpsPoints.length)),
+      );
+      nps = npsData.rawNpsPoints[sampleIdx] ?? 0;
+    }
+
+    setHoverInfo({
+      timeSec: targetTime,
+      nps,
+      percent: percent * 100,
+    });
+  }
+
+  function handleScrubberMouseLeave() {
+    setHoverInfo(null);
+  }
 
   // Sincronizar solo el estado de mute con el elemento de audio, sin recargar ni reiniciar.
   // `muted` silencia el audio pero mantiene la reproducción (currentTime sigue avanzando),
@@ -381,7 +480,18 @@ export function RecentBeatmaps({
       {/* VISTA 3: MODO BMS ARCADE (CARRUSEL INMERSIVO 1 A 1 CON AUDIO PREVIEW) */}
       {layoutMode === "bms" && activeBmsMap && (
         <div className="home-bms-showcase-container">
-          <div className="home-bms-carousel-card">
+          <div
+            className="home-bms-carousel-card"
+            style={
+              {
+                "--bms-accent": bmsPalette ? `rgb(${bmsPalette.centerRgb.join(",")})` : "#38bdf8",
+                "--bms-accent-edge": bmsPalette ? `rgb(${bmsPalette.edgeRgb.join(",")})` : "#818cf8",
+                "--bms-accent-bg": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.14)` : "rgba(56, 189, 248, 0.12)",
+                "--bms-accent-border": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.35)` : "rgba(56, 189, 248, 0.3)",
+                "--bms-accent-glow": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.8)` : "rgba(56, 189, 248, 0.8)",
+              } as React.CSSProperties
+            }
+          >
             {/* Portada / Jacket Gigante con Scanlines y Viñeta */}
             <div className="home-bms-jacket-viewport">
               {activeBmsBgUrl ? (
@@ -408,6 +518,19 @@ export function RecentBeatmaps({
                 </span>
                 <span className="home-bms-bpm-badge mono">{activeBmsMap.bpm} BPM</span>
               </div>
+
+              {/* Opción 3: Visualizador de Audio Arcade en la base del Jacket */}
+              <div className="home-bms-jacket-visualizer">
+                <AudioVisualizer
+                  audioElement={audioRef.current}
+                  isPlaying={isPlayingPreview && !isPreviewMuted}
+                  barCount={36}
+                  width={280}
+                  height={32}
+                  coverImageUrl={activeBmsBgUrl}
+                  onPaletteChange={setBmsPalette}
+                />
+              </div>
             </div>
 
             {/* Panel de Metadatos y Acción Central */}
@@ -418,16 +541,7 @@ export function RecentBeatmaps({
                     STAGE {carouselIndex + 1} / {maps.length}
                   </div>
 
-                  <div className="home-bms-audio-controls">
-                    {/* Visualizador de Espectro Arcade 60FPS con Rango Dinámico Amplio */}
-                    <AudioVisualizer
-                      audioElement={audioRef.current}
-                      isPlaying={isPlayingPreview && !isPreviewMuted}
-                      barCount={26}
-                      width={140}
-                      height={28}
-                    />
-
+                  <div className="home-bms-top-actions">
                     {/* Control de Audio Preview */}
                     <button
                       type="button"
@@ -468,6 +582,129 @@ export function RecentBeatmaps({
 
                 <div className="home-bms-timestamp mono">
                   Jugado {formatTimeAgo(activeBmsMap.timestamp)}
+                </div>
+
+                {/* Reproductor con Visualizador justo arriba de la Línea de Tiempo estilo YouTube */}
+                <div className="home-bms-player-block">
+                  <div className="home-bms-player-header">
+                    <div className="home-bms-player-times mono">
+                      <span className="home-bms-time-current">
+                        {Math.floor(currentTimeSec / 60)}:
+                        {String(Math.floor(currentTimeSec % 60)).padStart(2, "0")}
+                      </span>
+                      <span className="home-bms-time-sep">/</span>
+                      <span className="home-bms-time-total">
+                        {durationSec > 0
+                          ? `${Math.floor(durationSec / 60)}:${String(Math.floor(durationSec % 60)).padStart(2, "0")}`
+                          : "--:--"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Barra de progreso / Scrubbing estilo YouTube con Onda de Densidad NPS */}
+                  <div
+                    className="home-bms-scrubber"
+                    onClick={handleScrubberSeek}
+                    onMouseMove={handleScrubberMouseMove}
+                    onMouseLeave={handleScrubberMouseLeave}
+                    role="slider"
+                    aria-label="Línea de tiempo de la canción"
+                    aria-valuemin={0}
+                    aria-valuemax={durationSec || 100}
+                    aria-valuenow={currentTimeSec}
+                    tabIndex={0}
+                  >
+                    {/* Tooltip interactivo flotante al hacer hover */}
+                    {hoverInfo && (
+                      <div
+                        className="home-bms-scrubber-tooltip mono"
+                        style={{ left: `${Math.max(10, Math.min(90, hoverInfo.percent))}%` }}
+                      >
+                        <span className="home-bms-tooltip-time">
+                          {Math.floor(hoverInfo.timeSec / 60)}:
+                          {String(Math.floor(hoverInfo.timeSec % 60)).padStart(2, "0")}
+                        </span>
+                        <span className="home-bms-tooltip-sep">•</span>
+                        <span className="home-bms-tooltip-nps">{hoverInfo.nps} NPS</span>
+                      </div>
+                    )}
+
+                    {/* Línea guía vertical de hover */}
+                    {hoverInfo && (
+                      <div
+                        className="home-bms-scrubber-hover-line"
+                        style={{ left: `${hoverInfo.percent}%` }}
+                      />
+                    )}
+
+                    {/* Curva suave de densidad NPS (SVG) */}
+                    {svgPaths && (
+                      <div className="home-bms-nps-wave-container">
+                        <svg
+                          viewBox="0 0 1000 20"
+                          preserveAspectRatio="none"
+                          className="home-bms-nps-wave-svg"
+                        >
+                          <defs>
+                            {/* Relleno vertical transparente estilo YouTube */}
+                            <linearGradient id="bmsWaveFillGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.30" />
+                              <stop offset="60%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.10" />
+                              <stop offset="100%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.02" />
+                            </linearGradient>
+                            {/* Borde superior con color fuerte vibrante */}
+                            <linearGradient id="bmsWaveStrokeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                              <stop offset="0%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="1" />
+                              <stop offset="100%" stopColor="var(--bms-accent-edge, #818cf8)" stopOpacity="1" />
+                            </linearGradient>
+                            <clipPath id="bmsWaveProgressClip">
+                              <rect
+                                x="0"
+                                y="0"
+                                width={`${durationSec > 0 ? (currentTimeSec / durationSec) * 1000 : 0}`}
+                                height="20"
+                              />
+                            </clipPath>
+                          </defs>
+
+                          {/* Curva de fondo translúcida (sección no reproducida) */}
+                          <path
+                            d={svgPaths.fillPath}
+                            className="home-bms-nps-wave-bg"
+                          />
+                          <path
+                            d={svgPaths.strokePath}
+                            className="home-bms-nps-wave-bg-stroke"
+                          />
+
+                          {/* Curva activa iluminada: cuerpo transparente y borde superior de color fuerte */}
+                          <g clipPath="url(#bmsWaveProgressClip)">
+                            <path
+                              d={svgPaths.fillPath}
+                              fill="url(#bmsWaveFillGradient)"
+                              className="home-bms-nps-wave-fill"
+                            />
+                            <path
+                              d={svgPaths.strokePath}
+                              stroke="url(#bmsWaveStrokeGradient)"
+                              className="home-bms-nps-wave-stroke"
+                            />
+                          </g>
+                        </svg>
+                      </div>
+                    )}
+
+                    <div className="home-bms-scrubber-track">
+                      <div
+                        className="home-bms-scrubber-fill"
+                        style={{
+                          width: `${durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0}%`,
+                        }}
+                      >
+                        <div className="home-bms-scrubber-thumb" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

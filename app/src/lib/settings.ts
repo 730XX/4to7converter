@@ -4,8 +4,8 @@
  */
 export const SETTINGS_LIMITS = {
   scrollSpeed: { min: 10, max: 60, step: 1, default: 25 },
-  volume: { min: 0, max: 100, step: 5, default: 40, },
-  hitsoundVolume: { min: 0, max: 100, step: 5, default: 20, },
+  volume: { min: 0, max: 100, step: 1, default: 40, },
+  hitsoundVolume: { min: 0, max: 100, step: 1, default: 20, },
   backdropDim: { min: 0, max: 100, step: 5, default: 60, },
   playOffsetMs: { min: -150, max: 150, step: 5, default: 0, },
   comboPositionPercent: { min: 30, max: 85, step: 1, default: 55, },

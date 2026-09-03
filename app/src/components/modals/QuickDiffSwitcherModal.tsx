@@ -41,9 +41,29 @@ export function QuickDiffSwitcherModal({
     if (!list) return;
     const item = list.children[selectedIndex] as HTMLElement | undefined;
     if (item) {
-      item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      item.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
   }, [selectedIndex, isOpen]);
+
+  // Manejar el scroll con rueda del ratón evitando el zoom del navegador con Ctrl presionado
+  useEffect(() => {
+    if (!isOpen) return;
+    const list = listRef.current;
+    if (!list) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      list.scrollTop += e.deltaY;
+    };
+
+    const dialog = list.closest(".quick-diff-dialog") || list;
+    dialog.addEventListener("wheel", handleWheel as EventListener, { passive: false });
+
+    return () => {
+      dialog.removeEventListener("wheel", handleWheel as EventListener);
+    };
+  }, [isOpen]);
 
   // Manejador de teclado mientras el modal está activo
   useEffect(() => {

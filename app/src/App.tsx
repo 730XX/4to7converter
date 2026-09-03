@@ -352,7 +352,7 @@ export default function App() {
       // 1. Ctrl + Alt + Rueda: Volumen de Hitsounds (Independiente)
       if ((event.ctrlKey || event.metaKey) && event.altKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.hitsoundVolume.step : -SETTINGS_LIMITS.hitsoundVolume.step;
+        const delta = event.deltaY < 0 ? 5 : -5;
         setSettings((prev) => {
           const nextHitVol = Math.max(
             SETTINGS_LIMITS.hitsoundVolume.min,
@@ -399,7 +399,7 @@ export default function App() {
       // 3. Alt + Rueda: Volumen de la música
       if (event.altKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.volume.step : -SETTINGS_LIMITS.volume.step;
+        const delta = event.deltaY < 0 ? 5 : -5;
         setSettings((prev) => {
           const nextVol = Math.max(
             SETTINGS_LIMITS.volume.min,

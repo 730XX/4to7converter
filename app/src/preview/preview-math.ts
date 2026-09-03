@@ -144,6 +144,10 @@ export function getVisibleHitObjects(
 /**
  * Encuentra el índice del primer hit object que podría estar visible o activo.
  * Usa búsqueda binaria basada en el `timeMs` para optimizar el bucle de renderizado.
+ *
+ * Cuando existe un `speedTimeline`, se calcula la ventana temporal de peor caso
+ * usando `maxSpeedFactor` en lugar de desactivar la búsqueda por completo.
+ * Esto mantiene el rendimiento en O(log N) incluso con 1000+ timing points.
  */
 export function findFirstVisibleNoteIndex(
   hitObjects: HitObject[],
@@ -154,27 +158,28 @@ export function findFirstVisibleNoteIndex(
 ): number {
   if (hitObjects.length === 0) return 0;
 
-  // Calculamos el tiempo máximo que una nota podría permanecer en pantalla después de su timeMs.
-  // approachMs es el tiempo que tarda desde la cima hasta la línea de golpe.
-  // Además, dejamos un margen extra de 2000ms para asegurar que las Long Notes o notas retrasadas no desaparezcan.
-  const timeMargin = metrics.approachMs + 2000;
-  // STOP puede dejar una nota visible indefinidamente. Las LNs también pueden
-  // tener una cabeza muy antigua y una cola todavía visible, así que se conserva
-  // el escaneo completo en esos casos para no perder geometría válida.
-  if (speedTimeline) {
-    if (speedTimeline.hasStops || hitObjects.some((note) => note.endTimeMs !== null)) return 0;
+  // Tiempo base de visibilidad (approachMs + margen para LNs activas y notas pasadas)
+  const baseMargin = metrics.approachMs + 2000;
 
-    const lowerDistance = -metrics.hitLineY - VISIBILITY_MARGIN;
-    let left = 0;
-    let right = hitObjects.length;
-    while (left < right) {
-      const middle = left + Math.floor((right - left) / 2);
-      const note = hitObjects[middle]!;
-      if (speedTimeline.distanceBetween(currentTimeMs, note.timeMs) >= lowerDistance) right = middle;
-      else left = middle + 1;
-    }
-    return left;
+  let timeMargin: number;
+  if (speedTimeline) {
+    // Con SV activo, el factor de velocidad máximo puede comprimir o expandir
+    // la ventana temporal visible. Usamos el peor caso (velocidad más lenta no-stop)
+    // para asegurar que no cortemos notas que deberían estar en pantalla.
+    // maxSpeedFactor >= 1 siempre, así que dividimos para cubrir slowdowns.
+    // Para stops: las notas durante un stop no se mueven, pero tienen un timeMs
+    // absoluto, así que un margen temporal generoso las cubre sin escanear todo.
+    const maxFactor = Math.max(speedTimeline.maxSpeedFactor, 1);
+    // En el peor caso, una nota puede tardar approachMs * maxFactor en cruzar la pantalla.
+    // Para cubrir slowdowns (factor < 1 no-stop), expandimos el margen.
+    // Para stops, usamos un tope de 10 segundos extra (un stop de >10s sin notas
+    // visibles no afecta el rendering).
+    const stopExtraMs = speedTimeline.hasStops ? 10000 : 0;
+    timeMargin = baseMargin * maxFactor + stopExtraMs;
+  } else {
+    timeMargin = baseMargin;
   }
+
   const targetTime = currentTimeMs - timeMargin;
 
   let left = 0;
@@ -186,11 +191,12 @@ export function findFirstVisibleNoteIndex(
     const note = hitObjects[mid];
     if (!note) break;
 
-    // Para notas LNs muy largas, podríamos fallar si solo buscamos por timeMs.
-    // Sin embargo, dado que el margen es amplio (2s), cubrimos la mayoría de casos.
-    // En `renderer.ts` las LNs activas se dibujan mediante el set `holdingLnIndices`.
-    if (note.timeMs >= targetTime) {
-      result = mid; // Este podría ser nuestro candidato, buscamos más a la izquierda
+    // Usar el mayor entre timeMs y endTimeMs para LNs cuya cola todavía podría
+    // estar visible aunque su cabeza ya haya pasado hace mucho.
+    const noteEndTime = note.endTimeMs !== null ? Math.max(note.timeMs, note.endTimeMs) : note.timeMs;
+
+    if (noteEndTime >= targetTime) {
+      result = mid;
       right = mid - 1;
     } else {
       left = mid + 1;

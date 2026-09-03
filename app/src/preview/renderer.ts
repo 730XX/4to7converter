@@ -327,6 +327,7 @@ export function drawPlayfieldFrame(
     glow,
     dir,
     userActiveLanes,
+    speedTimeline,
   );
   drawNotes(
     ctx,
@@ -434,6 +435,7 @@ function drawHitBeams(
   hitGlow: boolean = true,
   scrollDirection: "down" | "up" = "down",
   userActiveLanes: boolean[] | null = null,
+  speedTimeline?: SpeedTimeline,
 ): void {
   // Si el usuario desactivó el resplandor / glow en ajustes, no dibujar haces de luz
   if (!hitGlow) {
@@ -473,7 +475,7 @@ function drawHitBeams(
     // La ventana de efecto de luz es muy pequeña (-50ms a +250ms).
     // Podemos crear una métrica temporal para findFirstVisibleNoteIndex
     const fakeMetrics = { approachMs: 250, hitLineY, width, height, topPadding: 0 };
-    const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, fakeMetrics, scrollDirection);
+    const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, fakeMetrics, scrollDirection, speedTimeline);
 
     for (let i = startIndex; i < hitObjects.length; i++) {
       const ho = hitObjects[i];
