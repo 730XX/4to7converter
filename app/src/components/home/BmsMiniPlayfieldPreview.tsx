@@ -3,7 +3,7 @@ import { parseOsuFile } from "../../../../src/core/osu/parser";
 import type { HitObject, OsuBeatmap } from "../../../../src/core/osu/types";
 import { loadBeatmapWithAudio, loadOsuSkinConfig } from "../../lib/native";
 import { loadSettings } from "../../lib/settings";
-import { getAudioEncoderDelayMs } from "../../lib/audio";
+import { getAudioEncoderDelayMs, type AudioPlayer } from "../../lib/audio";
 import { PlayEngine } from "../../preview/play-engine";
 import { buildPlayfieldPalette, drawPlayfieldFrame, type PlayfieldPalette } from "../../preview/renderer";
 import { loadAllSkinTextures, type LoadedSkinTextures } from "../../preview/skin-manager";
@@ -11,7 +11,8 @@ import { buildSpeedTimeline, type SpeedTimeline } from "../../preview/speed-time
 
 interface BmsMiniPlayfieldPreviewProps {
   beatmapPath: string | null;
-  audioElement: HTMLAudioElement | null;
+  audioElement?: HTMLAudioElement | null;
+  audioPlayer?: AudioPlayer | null;
   isPlaying: boolean;
   scrollSpeed?: number;
   scrollDirection?: "down" | "up";
@@ -25,6 +26,7 @@ interface BmsMiniPlayfieldPreviewProps {
 export function BmsMiniPlayfieldPreview({
   beatmapPath,
   audioElement,
+  audioPlayer,
   isPlaying,
   scrollSpeed = 25,
   scrollDirection = "down",
@@ -58,6 +60,7 @@ export function BmsMiniPlayfieldPreview({
   const receptorOffsetRef = useRef<number>(receptorOffset);
   const noteHeightRef = useRef<number>(noteHeight);
   const isPlayingRef = useRef<boolean>(isPlaying);
+  const audioPlayerRef = useRef<AudioPlayer | null>(audioPlayer ?? null);
   const lastTimeMsRef = useRef<number>(0);
   const encoderDelayMsRef = useRef<number>(0);
   // Marca que el motor se acaba de (re)inicializar y hay que sembrar el cursor
@@ -75,6 +78,7 @@ export function BmsMiniPlayfieldPreview({
   receptorOffsetRef.current = receptorOffset;
   noteHeightRef.current = noteHeight;
   isPlayingRef.current = isPlaying;
+  audioPlayerRef.current = audioPlayer ?? null;
   hitObjects4KRef.current = hitObjects4K;
   customSkinRef.current = customSkinTextures;
 
@@ -198,47 +202,45 @@ export function BmsMiniPlayfieldPreview({
 
       const now = performance.now();
       let currentAudioSec = 0;
-      
-      // Intentar leer el tiempo real del audio
-      if (audioElement && !isNaN(audioElement.currentTime)) {
-        currentAudioSec = audioElement.currentTime;
-      }
-
-      // Si el audio recién se carga o está en 0, calcular un tiempo visual fluido en base a performance.now()
       let timeMs: number;
-      
-      if (currentAudioSec === 0 && notes.length > 0) {
-        // Modo fallback: el audio aún no arranca. Loopear visualmente la preview.
+      const ap = audioPlayerRef.current;
+
+      if (ap) {
+        // Reloj Web Audio API de alta precisión (calibrado a nivel de muestra PCM con encoder delay)
+        timeMs = ap.getCurrentTimeMs();
+        currentAudioSec = timeMs / 1000;
+      } else if (audioElement && !isNaN(audioElement.currentTime)) {
+        currentAudioSec = audioElement.currentTime;
+        if (currentAudioSec === 0 && notes.length > 0) {
+          const firstNoteTime = notes[0]?.timeMs ?? 0;
+          timeMs = firstNoteTime + ((now % 30000) / 30000) * 15000;
+          lastSyncAudioTimeRef.current = 0;
+          lastSyncPerfTimeRef.current = now;
+        } else {
+          if (Math.abs(currentAudioSec - lastSyncAudioTimeRef.current) > 0.04) {
+            lastSyncAudioTimeRef.current = currentAudioSec;
+            lastSyncPerfTimeRef.current = now;
+          }
+          const elapsedSinceSync = (now - lastSyncPerfTimeRef.current) / 1000;
+          timeMs = (lastSyncAudioTimeRef.current + elapsedSinceSync) * 1000 - encoderDelayMsRef.current;
+        }
+      } else if (notes.length > 0) {
         const firstNoteTime = notes[0]?.timeMs ?? 0;
         timeMs = firstNoteTime + ((now % 30000) / 30000) * 15000;
-        
-        // Mantener lastSync actualizado para cuando el audio arranque
-        lastSyncAudioTimeRef.current = 0;
-        lastSyncPerfTimeRef.current = now;
       } else {
-        // Sincronización fina con el audio
-        if (Math.abs(currentAudioSec - lastSyncAudioTimeRef.current) > 0.04) {
-          lastSyncAudioTimeRef.current = currentAudioSec;
-          lastSyncPerfTimeRef.current = now;
-        }
-
-        const elapsedSinceSync = (now - lastSyncPerfTimeRef.current) / 1000;
-        // Restar el encoder delay (según el formato del audio) para que el reloj del
-        // render coincida exactamente con las marcas de tiempo del beatmap, igual que el preview principal.
-        timeMs = (lastSyncAudioTimeRef.current + elapsedSinceSync) * 1000 - encoderDelayMsRef.current;
+        timeMs = 0;
       }
 
-      // Si el tiempo loopea hacia atrás o salta repentinamente
-      if (timeMs < lastTimeMsRef.current - 400) {
+      // Si el tiempo salta repentinamente (adelante o atrás) por seek o preview time
+      if (Math.abs(timeMs - lastTimeMsRef.current) > 400) {
         playEngineRef.current.reset();
         pendingSeedRef.current = true;
       }
       lastTimeMsRef.current = timeMs;
 
-      // Solo procesar Autoplay cuando el audio tiene un reloj real (no en la carga/fallback),
-      // para no disparar hitsounds de la nada al cambiar de mapa. Los hitsounds solo suenan
-      // si el preview está reproduciéndose (no muteado); el juicio visual sigue activo.
-      if (currentAudioSec > 0) {
+      // Autoplay: procesar notas sincronizadas con el reloj
+      const hasAudioClock = (ap && (ap.isPlaying() || timeMs > 0)) || currentAudioSec > 0;
+      if (hasAudioClock) {
         if (pendingSeedRef.current) {
           playEngineRef.current.seedAutoplayCursor(timeMs);
           pendingSeedRef.current = false;

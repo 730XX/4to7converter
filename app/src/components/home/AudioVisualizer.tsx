@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-interface AudioVisualizerProps {
-  audioElement: HTMLAudioElement | null;
-  isPlaying: boolean;
-  barCount?: number;
-  width?: number;
-  height?: number;
-  coverImageUrl?: string | null;
-}
-
 export interface VisualizerPalette {
   centerRgb: [number, number, number];
   edgeRgb: [number, number, number];
@@ -19,8 +10,9 @@ export const DEFAULT_PALETTE: VisualizerPalette = {
   edgeRgb: [180, 180, 180],   // Light grey
 };
 
-interface AudioVisualizerProps {
-  audioElement: HTMLAudioElement | null;
+export interface AudioVisualizerProps {
+  audioElement?: HTMLAudioElement | null;
+  analyserNode?: AnalyserNode | null;
   isPlaying: boolean;
   barCount?: number;
   width?: number;
@@ -35,6 +27,7 @@ let connectedElement: HTMLAudioElement | null = null;
 
 export function AudioVisualizer({
   audioElement,
+  analyserNode,
   isPlaying,
   barCount = 26,
   width = 140,
@@ -246,10 +239,11 @@ export function AudioVisualizer({
   }, [audioElement]);
 
   useEffect(() => {
-    if (isPlaying && globalAudioCtx && globalAudioCtx.state === "suspended") {
-      void globalAudioCtx.resume();
+    const ctx = analyserNode?.context ?? globalAudioCtx;
+    if (isPlaying && ctx && ctx.state === "suspended" && "resume" in ctx) {
+      void (ctx as AudioContext).resume();
     }
-  }, [isPlaying]);
+  }, [isPlaying, analyserNode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -262,7 +256,9 @@ export function AudioVisualizer({
     const barWidth = Math.max(2.5, (width - (barCount - 1) * spacing) / barCount);
     const radius = barWidth / 2;
 
-    if (!isPlaying || !globalAnalyser) {
+    const analyser = analyserNode ?? globalAnalyser;
+
+    if (!isPlaying || !analyser) {
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
       for (let i = 0; i < barCount; i++) {
@@ -274,7 +270,6 @@ export function AudioVisualizer({
       return;
     }
 
-    const analyser = globalAnalyser;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     const smoothHeights = new Array(halfCount).fill(2);

@@ -27,9 +27,13 @@ export interface AudioPlayer {
   getDurationMs(): number;
   /** Devuelve true si el audio está en reproducción activa. */
   isPlaying(): boolean;
+  /** Configura si la reproducción debe repetirse en bucle continuo. */
+  setLoop(loop: boolean): void;
   /** Siempre false: los seeks en memoria son síncronos e instantáneos. */
   isSeeking(): boolean;
-  /** Libera los buffers y el contexto de audio. */
+  /** Devuelve el AnalyserNode para visualizadores de espectro en tiempo real. */
+  getAnalyserNode(): AnalyserNode | null;
+  /** Pausa y libera los buffers y el contexto de audio. */
   dispose(): void;
 }
 
@@ -50,17 +54,92 @@ export function getAudioEncoderDelayMs(audioUrlOrPath: string): number {
   return 0;
 }
 
+// =========================================================================
+// SINGLETON AUDIOCONTEXT Y CACHE LRU DE AUDIOBUFFER
+// =========================================================================
+let sharedAudioContext: AudioContext | null = null;
+
+export function getSharedAudioContext(): AudioContext {
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedAudioContext = new AudioCtx();
+  }
+  if (sharedAudioContext.state === "suspended") {
+    void sharedAudioContext.resume();
+  }
+  return sharedAudioContext;
+}
+
+const MAX_BUFFER_CACHE_ENTRIES = 12;
+const bufferCache = new Map<string, AudioBuffer>();
+const pendingDecodes = new Map<string, Promise<AudioBuffer>>();
+
+/**
+ * Carga y decodifica un archivo de audio en un AudioBuffer usando cache LRU y deduplicación.
+ */
+export async function getOrFetchAudioBuffer(url: string): Promise<AudioBuffer> {
+  const cached = bufferCache.get(url);
+  if (cached) {
+    // Promover en la cola LRU
+    bufferCache.delete(url);
+    bufferCache.set(url, cached);
+    return cached;
+  }
+
+  const existingPromise = pendingDecodes.get(url);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const decodePromise = (async () => {
+    try {
+      const context = getSharedAudioContext();
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const decoded = await context.decodeAudioData(arrayBuffer);
+
+      // Manejar política LRU si se supera el tamaño máximo
+      if (bufferCache.size >= MAX_BUFFER_CACHE_ENTRIES) {
+        const oldestKey = bufferCache.keys().next().value;
+        if (oldestKey) {
+          bufferCache.delete(oldestKey);
+        }
+      }
+      bufferCache.set(url, decoded);
+      return decoded;
+    } finally {
+      pendingDecodes.delete(url);
+    }
+  })();
+
+  pendingDecodes.set(url, decodePromise);
+  return decodePromise;
+}
+
+/**
+ * Pre-decodifica en segundo plano el audio de una URL para que esté listo al instante (0ms).
+ */
+export function prefetchAudio(url: string): void {
+  if (!url || bufferCache.has(url) || pendingDecodes.has(url)) return;
+  void getOrFetchAudioBuffer(url).catch(() => {
+    // Ignorar errores de prefetch silenciosamente
+  });
+}
+
 /**
  * Crea un reproductor Web Audio API optimizado para juegos de ritmo.
  */
 export function createAudioPlayer(): AudioPlayer {
-  let ctx: AudioContext | null = null;
   let audioBuffer: AudioBuffer | null = null;
   let currentSource: AudioBufferSourceNode | null = null;
   let gainNode: GainNode | null = null;
+  let analyserNode: AnalyserNode | null = null;
 
   let isPlaying = false;
-  let playbackRate = 1;
+  let isLooping = false;
+  let playbackRate = 1.0;
   let volume = 0.8;
   let rawDurationMs = 0;
   let encoderDelayMs = MP3_ENCODER_DELAY_MS;
@@ -68,19 +147,6 @@ export function createAudioPlayer(): AudioPlayer {
   let startCtxTime = 0;
   let startOffsetSec = 0;
   let pausedOffsetSec = 0;
-
-  function getAudioContext(): AudioContext {
-    if (!ctx || ctx.state === "closed") {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      ctx = new AudioCtx();
-    }
-    if (ctx.state === "suspended") {
-      void ctx.resume();
-    }
-    return ctx;
-  }
 
   function stopCurrentSource(): void {
     if (currentSource) {
@@ -97,7 +163,7 @@ export function createAudioPlayer(): AudioPlayer {
 
   function startSourceAt(offsetSec: number): void {
     if (!audioBuffer) return;
-    const context = getAudioContext();
+    const context = getSharedAudioContext();
     stopCurrentSource();
 
     const clampedOffset = Math.max(0, Math.min(offsetSec, audioBuffer.duration));
@@ -113,11 +179,24 @@ export function createAudioPlayer(): AudioPlayer {
     const source = context.createBufferSource();
     source.buffer = audioBuffer;
     source.playbackRate.value = playbackRate;
+    source.loop = isLooping;
+    if (isLooping && audioBuffer) {
+      source.loopStart = 0;
+      source.loopEnd = audioBuffer.duration;
+    }
 
     if (!gainNode) {
       gainNode = context.createGain();
       gainNode.gain.setValueAtTime(volume, context.currentTime);
-      gainNode.connect(context.destination);
+
+      analyserNode = context.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.35;
+      analyserNode.minDecibels = -90;
+      analyserNode.maxDecibels = -15;
+
+      gainNode.connect(analyserNode);
+      analyserNode.connect(context.destination);
     } else {
       gainNode.gain.setValueAtTime(volume, context.currentTime);
     }
@@ -126,9 +205,11 @@ export function createAudioPlayer(): AudioPlayer {
 
     source.onended = () => {
       if (currentSource === source) {
-        currentSource = null;
-        isPlaying = false;
-        pausedOffsetSec = audioBuffer ? audioBuffer.duration : 0;
+        if (!isLooping) {
+          currentSource = null;
+          isPlaying = false;
+          pausedOffsetSec = audioBuffer ? audioBuffer.duration : 0;
+        }
       }
     };
 
@@ -138,23 +219,20 @@ export function createAudioPlayer(): AudioPlayer {
   }
 
   async function load(url: string): Promise<number> {
-    const context = getAudioContext();
     stopCurrentSource();
     isPlaying = false;
     pausedOffsetSec = 0;
 
     encoderDelayMs = getAudioEncoderDelayMs(url);
 
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    audioBuffer = await context.decodeAudioData(arrayBuffer);
+    audioBuffer = await getOrFetchAudioBuffer(url);
     rawDurationMs = audioBuffer.duration * 1000;
     return rawDurationMs;
   }
 
   function play(): Promise<void> {
     if (!audioBuffer) return Promise.resolve();
-    const context = getAudioContext();
+    const context = getSharedAudioContext();
     if (context.state === "suspended") {
       void context.resume();
     }
@@ -181,9 +259,13 @@ export function createAudioPlayer(): AudioPlayer {
 
   function getCurrentTimeMs(): number {
     if (!audioBuffer) return 0;
-    if (isPlaying && ctx) {
-      const elapsedCtxTime = ctx.currentTime - startCtxTime;
-      const currentBufferSec = startOffsetSec + elapsedCtxTime * playbackRate;
+    const context = getSharedAudioContext();
+    if (isPlaying) {
+      const elapsedCtxTime = context.currentTime - startCtxTime;
+      let currentBufferSec = startOffsetSec + elapsedCtxTime * playbackRate;
+      if (isLooping && audioBuffer && audioBuffer.duration > 0) {
+        currentBufferSec = currentBufferSec % audioBuffer.duration;
+      }
       // Restamos el encoder delay para que el reloj coincida exactamente con las marcas de tiempo del beatmap
       const beatmapTimeMs = currentBufferSec * 1000 - encoderDelayMs;
       return Math.max(0, Math.min(beatmapTimeMs, rawDurationMs));
@@ -199,31 +281,51 @@ export function createAudioPlayer(): AudioPlayer {
     seek,
     setPlaybackRate: (rate) => {
       playbackRate = rate;
-      if (currentSource && ctx) {
+      const context = getSharedAudioContext();
+      if (currentSource) {
         const currentMs = getCurrentTimeMs();
         startOffsetSec = (currentMs + encoderDelayMs) / 1000;
-        startCtxTime = ctx.currentTime;
-        currentSource.playbackRate.setValueAtTime(rate, ctx.currentTime);
+        startCtxTime = context.currentTime;
+        currentSource.playbackRate.setValueAtTime(rate, context.currentTime);
       }
     },
     setVolume: (vol) => {
       volume = Math.max(0, Math.min(1, vol));
-      if (gainNode && ctx) {
-        gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+      const context = getSharedAudioContext();
+      if (gainNode) {
+        gainNode.gain.setValueAtTime(volume, context.currentTime);
       }
     },
     getCurrentTimeMs,
     getDurationMs: () => rawDurationMs,
     isPlaying: () => isPlaying,
+    setLoop: (loop: boolean) => {
+      isLooping = loop;
+      if (currentSource) {
+        currentSource.loop = loop;
+        if (loop && audioBuffer) {
+          currentSource.loopStart = 0;
+          currentSource.loopEnd = audioBuffer.duration;
+        }
+      }
+    },
     isSeeking: () => false,
+    getAnalyserNode: () => analyserNode,
     dispose: () => {
       stopCurrentSource();
-      if (ctx && ctx.state !== "closed") {
-        void ctx.close();
+      if (gainNode) {
+        try {
+          gainNode.disconnect();
+        } catch {}
       }
-      ctx = null;
+      if (analyserNode) {
+        try {
+          analyserNode.disconnect();
+        } catch {}
+      }
       audioBuffer = null;
       gainNode = null;
+      analyserNode = null;
     },
   };
 }

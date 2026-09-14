@@ -10,6 +10,7 @@ import { ShortcutBar } from "./ShortcutBar";
 import { BgaBackground } from "./BgaBackground";
 import { SessionStatsWidget } from "./SessionStatsWidget";
 import { BmsMiniPlayfieldPreview } from "./BmsMiniPlayfieldPreview";
+import type { AudioPlayer } from "../../lib/audio";
 
 import type { UserSettings } from "../../lib/settings";
 
@@ -39,11 +40,13 @@ export function HomeScreen({
     map: RecentBeatmapItem | null;
     isBmsMode: boolean;
     audioElement: HTMLAudioElement | null;
+    audioPlayer: AudioPlayer | null;
     isPlaying: boolean;
   }>({
     map: null,
     isBmsMode: false,
     audioElement: null,
+    audioPlayer: null,
     isPlaying: false,
   });
   const onPathSelectedRef = useRef(onPathSelected);
@@ -139,18 +142,21 @@ export function HomeScreen({
     map: RecentBeatmapItem | null,
     isBmsMode: boolean,
     audioElement: HTMLAudioElement | null,
-    isPlaying: boolean
+    isPlaying: boolean,
+    audioPlayer?: AudioPlayer | null,
   ) => {
     setActiveBmsState((prev) => {
+      const p = audioPlayer ?? null;
       if (
         prev.map?.path === map?.path &&
         prev.isBmsMode === isBmsMode &&
         prev.audioElement === audioElement &&
+        prev.audioPlayer === p &&
         prev.isPlaying === isPlaying
       ) {
         return prev;
       }
-      return { map, isBmsMode, audioElement, isPlaying };
+      return { map, isBmsMode, audioElement, audioPlayer: p, isPlaying };
     });
   };
 
@@ -193,6 +199,7 @@ export function HomeScreen({
               <BmsMiniPlayfieldPreview
                 beatmapPath={activeBmsState.map.path}
                 audioElement={activeBmsState.audioElement}
+                audioPlayer={activeBmsState.audioPlayer}
                 isPlaying={activeBmsState.isPlaying}
                 scrollSpeed={settings?.scrollSpeed ?? 25}
                 scrollDirection={settings?.scrollDirection ?? "down"}

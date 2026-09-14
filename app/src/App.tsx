@@ -20,6 +20,7 @@ import { QuickToastOsd, type OsdState } from "./components/overlays/QuickToastOs
 import { FullScreenDropOverlay } from "./components/overlays/FullScreenDropOverlay";
 import { SettingsDrawer } from "./components/overlays/SettingsDrawer";
 import { KeybindsModal } from "./components/modals/KeybindsModal";
+import { ExportModal, type ExportMetadata } from "./components/modals/ExportModal";
 import { StatsBar } from "./components/editor/StatsBar";
 import { serializeOsuFile } from "../../src/core/osu/serializer";
 import { downloadConvertedBeatmap } from "./lib/download";
@@ -44,11 +45,7 @@ import {
   type LaneMapState,
 } from "./lib/lane-map-state";
 import { loadSettings, saveSettings, SETTINGS_LIMITS, type UserSettings } from "./lib/settings";
-import {
-  getTimingSections,
-  getKiaiIntervals,
-  evaluateDynamicRhythm,
-} from "./preview/beat-grid";
+import { getTimingSections, getKiaiIntervals, evaluateDynamicRhythm } from "./preview/beat-grid";
 import {
   deletePreset,
   loadActiveLaneMapState,
@@ -108,13 +105,17 @@ function preloadImage(url: string): Promise<void> {
  */
 function SceneTransitionVeil({ ready }: { ready: boolean }) {
   return (
-    <div className={`scene-transition-veil ${ready ? "is-hidden" : "is-visible"}`} aria-hidden="true" />
+    <div
+      className={`scene-transition-veil ${ready ? "is-hidden" : "is-visible"}`}
+      aria-hidden="true"
+    />
   );
 }
 
 export default function App() {
   const [fileName, setFileName] = useState<string | null>(null);
-  const [source, setSource] = useState<OsuBeatmap | null>(null);  const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [source, setSource] = useState<OsuBeatmap | null>(null);
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
   const [laneMapState, setLaneMapState] = useState<LaneMapState>(
     () => loadActiveLaneMapState() ?? createDefaultLaneMapState(),
   );
@@ -129,6 +130,7 @@ export default function App() {
   const [isPlayMode, setIsPlayMode] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
   const [presets, setPresets] = useState<LanePreset[]>(() => loadPresets());
   const [customSkinTextures, setCustomSkinTextures] = useState<LoadedSkinTextures | null>(null);
@@ -146,16 +148,8 @@ export default function App() {
   // Clave de almacenamiento única para el mapa y dificultad actual
   const mapStorageKey = useMemo(() => {
     if (!source) return null;
-    return getMapStorageKey(
-      sourcePath,
-      fileName,
-      source.artist,
-      source.title,
-      source.version,
-    );
+    return getMapStorageKey(sourcePath, fileName, source.artist, source.title, source.version);
   }, [source, sourcePath, fileName]);
-
-
 
   // Cargar secciones guardadas previamente para este mapa/dificultad o crear sección inicial
   useEffect(() => {
@@ -244,7 +238,12 @@ export default function App() {
   const handleResetRef = useRef<() => void>(() => {});
   const anyOverlayOpenRef = useRef(false);
   anyOverlayOpenRef.current =
-    isSettingsOpen || isQuickSearchOpen || isFileModalOpen || isDiffSwitcherOpen || isKeybindsModalOpen;
+    isSettingsOpen ||
+    isQuickSearchOpen ||
+    isFileModalOpen ||
+    isDiffSwitcherOpen ||
+    isKeybindsModalOpen ||
+    isExportModalOpen;
 
   // Transición de escena: el velo cubre hasta que la vista entrante cargó sus assets.
   const [isSceneReady, setIsSceneReady] = useState(false);
@@ -305,9 +304,7 @@ export default function App() {
         }
 
         // Modales/overlays que App no controla con estado: solo están en DOM cuando están abiertos
-        const isOtherOverlayOpen = document.querySelector(
-          ".modal-overlay, .debug-console-panel",
-        );
+        const isOtherOverlayOpen = document.querySelector(".modal-overlay, .debug-console-panel");
         if (isOtherOverlayOpen) {
           return;
         }
@@ -356,7 +353,10 @@ export default function App() {
         setSettings((prev) => {
           const nextHitVol = Math.max(
             SETTINGS_LIMITS.hitsoundVolume.min,
-            Math.min(SETTINGS_LIMITS.hitsoundVolume.max, (prev.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default) + delta),
+            Math.min(
+              SETTINGS_LIMITS.hitsoundVolume.max,
+              (prev.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default) + delta,
+            ),
           );
           triggerOsd({
             type: "audio",
@@ -375,7 +375,8 @@ export default function App() {
       // 2. Ctrl + Rueda: Velocidad de Scroll (Scroll Speed)
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
-        const delta = event.deltaY < 0 ? SETTINGS_LIMITS.scrollSpeed.step : -SETTINGS_LIMITS.scrollSpeed.step;
+        const delta =
+          event.deltaY < 0 ? SETTINGS_LIMITS.scrollSpeed.step : -SETTINGS_LIMITS.scrollSpeed.step;
         setSettings((prev) => {
           const nextSpeed = Math.max(
             SETTINGS_LIMITS.scrollSpeed.min,
@@ -557,7 +558,10 @@ export default function App() {
       }
 
       // Inicializar una sección inicial para toda la canción
-      const initialSecs = createInitialSection(Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000), laneMapState);
+      const initialSecs = createInitialSection(
+        Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000),
+        laneMapState,
+      );
       setSections(initialSecs);
       setActiveSectionId(initialSecs[0]?.id ?? null);
     } catch (error) {
@@ -654,7 +658,10 @@ export default function App() {
     if (!currentSource || playbackRef.current === null) return;
     const curTime = playbackRef.current.currentTimeMsRef.current;
     const lastObjTime = currentSource.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
-    const duration = playbackRef.current.durationMs > 0 ? playbackRef.current.durationMs : Math.max(lastObjTime, 1000);
+    const duration =
+      playbackRef.current.durationMs > 0
+        ? playbackRef.current.durationMs
+        : Math.max(lastObjTime, 1000);
 
     const { newSections, createdSectionId } = splitSectionAt(
       sectionsRef.current,
@@ -736,6 +743,22 @@ export default function App() {
     [converted],
   );
 
+  // Valores por defecto del modal de exportación, derivados del mapa cargado.
+  const exportDefaults = useMemo<ExportMetadata>(() => {
+    const rawSuffix = settings.diffSuffix?.trim();
+    const suffix = rawSuffix && rawSuffix.length > 0 ? rawSuffix : "(7K)";
+    const version7k = source?.version ? `${source.version} ${suffix}` : suffix;
+    return {
+      title: source?.title ?? converted?.title ?? "",
+      artist: source?.artist ?? converted?.artist ?? "",
+      creator: source?.creator ?? converted?.creator ?? "",
+      version: version7k,
+      overallDifficulty: converted?.overallDifficulty ?? source?.overallDifficulty ?? 7,
+      hpDrainRate: converted?.hpDrainRate ?? source?.hpDrainRate ?? 7,
+      previewTime: converted?.previewTime ?? source?.previewTime ?? -1,
+    };
+  }, [source, converted, settings.diffSuffix]);
+
   // Detección de carga de la escena: el velo se desvanece recién cuando la vista
   // entrante está lista (home local = tras unos frames; editor = fondo cargado).
   useEffect(() => {
@@ -815,14 +838,11 @@ export default function App() {
   });
   playbackRef.current = playback;
 
-
   // Sincronizar automáticamente la sección activa y su matriz de conversión según el tiempo de reproducción
   useEffect(() => {
     if (sections.length <= 1) return;
     const curTime = playback.timerTimeMs;
-    const matchingSection = sections.find(
-      (sec) => curTime >= sec.startMs && curTime < sec.endMs,
-    );
+    const matchingSection = sections.find((sec) => curTime >= sec.startMs && curTime < sec.endMs);
 
     if (matchingSection && matchingSection.id !== activeSectionId) {
       setActiveSectionId(matchingSection.id);
@@ -892,24 +912,40 @@ export default function App() {
       setSections((prev) =>
         prev.map((s) =>
           s.id === activeSectionId
-            ? { ...s, laneMapState: preset.laneMapState, presetId: preset.id, presetName: preset.name }
+            ? {
+                ...s,
+                laneMapState: preset.laneMapState,
+                presetId: preset.id,
+                presetName: preset.name,
+              }
             : s,
         ),
       );
     }
   }
 
-  async function handleExport(): Promise<void> {
+  function handleExport(): void {
+    if (source === null || converted === null || fileName === null) {
+      return;
+    }
+    setIsExportModalOpen(true);
+  }
+
+  async function performExport(meta: ExportMetadata): Promise<void> {
     if (source === null || converted === null || fileName === null) {
       return;
     }
 
-    const rawSuffix = settings.diffSuffix?.trim();
-    const suffix = rawSuffix && rawSuffix.length > 0 ? rawSuffix : "(7K)";
-    const version7k = source.version ? `${source.version} ${suffix}` : suffix;
+    const version7k = meta.version.trim().length > 0 ? meta.version.trim() : "(7K)";
     const exportBeatmap: OsuBeatmap = {
       ...converted,
+      title: meta.title,
+      artist: meta.artist,
+      creator: meta.creator,
       version: version7k,
+      overallDifficulty: meta.overallDifficulty,
+      hpDrainRate: meta.hpDrainRate,
+      previewTime: meta.previewTime,
       beatmapId: 0,
       beatmapSetId: source.beatmapSetId,
     };
@@ -921,19 +957,16 @@ export default function App() {
         const dir = lastSep >= 0 ? sourcePath.slice(0, lastSep) : ".";
 
         const clean = (str: string) => str.replace(/[\\/:*?"<>|]/g, "").trim();
-        const artist = clean(source.artist || "Artist");
-        const title = clean(source.title || "Title");
-        const creator = clean(source.creator || "Creator");
+        const artist = clean(meta.artist || "Artist");
+        const title = clean(meta.title || "Title");
+        const creator = clean(meta.creator || "Creator");
         const diff = clean(version7k);
 
         const newFileName = `${artist} - ${title} (${creator}) [${diff}].osu`;
         const newPath = `${dir}\\${newFileName}`;
 
         await saveBeatmap(newPath, content);
-        recordConversionMetric(
-          source?.title || fileName,
-          converted?.hitObjects.length || 0,
-        );
+        recordConversionMetric(meta.title || fileName, converted?.hitObjects.length || 0);
         appLogger.info(`[Export] ¡Mapa 7K guardado exitosamente en: ${newPath}`);
         triggerOsd({
           type: "export",
@@ -1148,6 +1181,16 @@ export default function App() {
         onClose={() => setIsKeybindsModalOpen(false)}
         currentKeybinds={settings.keybinds7k}
         onSave={(newKeys) => setSettings((prev) => ({ ...prev, keybinds7k: newKeys }))}
+      />
+
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={(meta) => {
+          setIsExportModalOpen(false);
+          void performExport(meta);
+        }}
+        defaults={exportDefaults}
       />
 
       <QuickSearchModal

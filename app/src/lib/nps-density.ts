@@ -3,6 +3,8 @@
  * y generación de siluetas de ondas SVG suaves estilo YouTube.
  */
 
+import type { TimingPoint } from "../../../src/core/osu/types";
+
 export interface NpsDensityData {
   /** Puntos de densidad normalizados (0.0 a 1.0) para renderizado visual */
   normalizedPoints: number[];
@@ -12,6 +14,48 @@ export interface NpsDensityData {
   peakNps: number;
   /** Duración de cada cubeta/muestra en segundos */
   sampleDurationSec: number;
+}
+
+/**
+ * Extrae eficientemente los TimingPoints de un archivo .osu sin parsear todo el árbol.
+ */
+export function extractTimingPoints(osuContent: string): TimingPoint[] {
+  const timingPoints: TimingPoint[] = [];
+  const lines = osuContent.split(/\r?\n/);
+  let inTimingPoints = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.trim();
+    if (!line) continue;
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      if (inTimingPoints) break;
+      inTimingPoints = line.toLowerCase() === "[timingpoints]";
+      continue;
+    }
+
+    if (inTimingPoints) {
+      if (line.startsWith("//")) continue;
+      const fields = line.split(",");
+      if (fields.length < 2) continue;
+      const offsetMs = Number.parseFloat(fields[0] ?? "");
+      const beatLength = Number.parseFloat(fields[1] ?? "");
+      if (!Number.isFinite(offsetMs) || !Number.isFinite(beatLength)) continue;
+
+      timingPoints.push({
+        offsetMs,
+        beatLength,
+        meter: Number.parseInt(fields[2] ?? "4", 10) || 4,
+        sampleSet: Number.parseInt(fields[3] ?? "0", 10) || 0,
+        sampleIndex: Number.parseInt(fields[4] ?? "0", 10) || 0,
+        volume: Number.parseInt(fields[5] ?? "100", 10) || 100,
+        uninherited: fields[6] === undefined ? true : fields[6] === "1",
+        effects: Number.parseInt(fields[7] ?? "0", 10) || 0,
+      });
+    }
+  }
+
+  return timingPoints.sort((a, b) => a.offsetMs - b.offsetMs);
 }
 
 /**

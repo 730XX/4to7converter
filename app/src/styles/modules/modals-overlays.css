@@ -65,7 +65,8 @@
 }
 
 @keyframes dropBorderPulse {
-  0%, 100% {
+  0%,
+  100% {
     border-color: rgba(56, 189, 248, 0.3);
   }
   50% {
@@ -168,6 +169,30 @@
 
 .preset-modal-dialog {
   max-width: 440px;
+}
+
+.export-modal-dialog {
+  max-width: 560px;
+}
+
+.modal-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.export-filename-preview {
+  gap: 4px;
+}
+
+.export-filename-value {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
 }
 
 .modal-header {
@@ -680,7 +705,9 @@
   filter: blur(5px) brightness(0.42);
   transform: scale(1.06);
   pointer-events: none;
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), filter 0.35s ease;
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.35s ease;
 }
 
 .quick-search-card-bg-placeholder {
