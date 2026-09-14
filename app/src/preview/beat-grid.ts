@@ -30,9 +30,107 @@ export function getTimingSections(timingPoints: TimingPoint[]): TimingSectionInf
 }
 
 /**
+ * Ajusta un tiempo al múltiplo más cercano de `beatLength / divisor` dentro de
+ * la sección de BPM que lo contiene. Si no hay secciones usables o la
+ * subdivisión no es positiva, devuelve el tiempo sin cambios.
+ *
+ * @param timeMs - Tiempo a ajustar en milisegundos.
+ * @param sections - Secciones de BPM ordenadas cronológicamente.
+ * @param divisor - Subdivisiones por beat (1 = beats, 4 = 1/4, etc.).
+ * @returns El tiempo ajustado a la grilla de beats.
+ */
+export function snapTimeToBeat(
+  timeMs: number,
+  sections: readonly TimingSectionInfo[],
+  divisor: number,
+): number {
+  if (!Number.isFinite(timeMs) || sections.length === 0) return timeMs;
+
+  // Última sección cuyo offset no supera el tiempo; si el tiempo es anterior a
+  // todas, se usa la primera.
+  let section = sections[0]!;
+  for (let index = 0; index < sections.length; index += 1) {
+    const candidate = sections[index]!;
+    if (candidate.offsetMs <= timeMs) {
+      section = candidate;
+    } else {
+      break;
+    }
+  }
+
+  const subLength = section.beatLength / divisor;
+  if (!(subLength > 0)) return timeMs;
+
+  const sectionStart = section.offsetMs;
+  const n = Math.max(0, Math.round((timeMs - sectionStart) / subLength));
+  return sectionStart + n * subLength;
+}
+
+/**
+ * Una línea guía horizontal del playfield. `level` es el denominador de la
+ * fracción de beat: 1 = beat (1/1), 2 = 1/2, 4 = 1/4, 3 = 1/3, etc. Permite
+ * colorear cada subdivisión de forma distinta.
+ */
+export interface BeatLine {
+  timeMs: number;
+  level: number;
+}
+
+/** Máximo común divisor (Euclides), para reducir la fracción n/divisor. */
+function greatestCommonDivisor(a: number, b: number): number {
+  return b === 0 ? a : greatestCommonDivisor(b, a % b);
+}
+
+/**
+ * Genera las líneas guía dentro de un rango de tiempo a partir de las secciones
+ * de BPM. `divisor` indica cuántas líneas por beat (1 = solo beats, 4 = 1/4).
+ * Cada línea trae su `level` (denominador de la fracción de beat).
+ */
+export function getBeatLinesInRange(
+  sections: readonly TimingSectionInfo[],
+  startMs: number,
+  endMs: number,
+  divisor: number,
+): BeatLine[] {
+  if (sections.length === 0 || !(endMs > startMs)) return [];
+  const step = Math.max(1, Math.floor(divisor));
+  const lines: BeatLine[] = [];
+
+  for (let s = 0; s < sections.length; s += 1) {
+    const section = sections[s]!;
+    const beatLength = section.beatLength;
+    if (!(beatLength > 0)) continue;
+
+    const sectionStart = section.offsetMs;
+    const nextSectionStart = sections[s + 1]?.offsetMs ?? Number.POSITIVE_INFINITY;
+    const rangeStart = Math.max(startMs, sectionStart);
+    const rangeEnd = Math.min(endMs, nextSectionStart);
+    if (!(rangeEnd > rangeStart)) continue;
+
+    const subLength = beatLength / step;
+    const firstIndex = Math.max(0, Math.ceil((rangeStart - sectionStart) / subLength));
+
+    for (let n = firstIndex; ; n += 1) {
+      const timeMs = sectionStart + n * subLength;
+      if (timeMs >= rangeEnd) break;
+      if (timeMs < rangeStart) continue;
+
+      const divisorGcd = greatestCommonDivisor(n, step);
+      const level = divisorGcd === 0 ? step : step / divisorGcd;
+      lines.push({ timeMs, level });
+    }
+  }
+
+  return lines;
+}
+
+/**
  * Extrae los intervalos de Kiai Time continuos [startMs, endMs].
  */
-export function getKiaiIntervals(timingPoints: TimingPoint[], durationMs: number = 3600000): KiaiInterval[] {
+export function getKiaiIntervals(
+  timingPoints: TimingPoint[],
+  durationMs: number = 3600000,
+): KiaiInterval[] {
   if (!timingPoints || timingPoints.length === 0) return [];
 
   const sorted = [...timingPoints].sort((a, b) => a.offsetMs - b.offsetMs);
@@ -117,7 +215,9 @@ export function evaluateDynamicRhythm(
     // beatIndex4: SIEMPRE base-4, para los 4 cuadritos visuales del metrónomo
     beatIndex4 = ((totalBeats % 4) + 4) % 4;
 
-    const beatPhase = ((elapsedSinceOffset % activeSection.beatLength) + activeSection.beatLength) % activeSection.beatLength;
+    const beatPhase =
+      ((elapsedSinceOffset % activeSection.beatLength) + activeSection.beatLength) %
+      activeSection.beatLength;
     const progress = beatPhase / activeSection.beatLength; // 0.0 -> 1.0
     // Attack instantáneo en el milisegundo 0 y decay exponencial suave
     beatPulse = Math.exp(-progress * 3.2);

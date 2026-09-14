@@ -1,4 +1,4 @@
-import { RotateCcw, Shuffle } from "lucide-react";
+import { Redo2, RotateCcw, Shuffle, Undo2 } from "lucide-react";
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import {
@@ -18,6 +18,10 @@ interface LaneMapperProps {
   sourceKeyCount: number;
   targetKeyCount: number;
   onChange: (nextState: LaneMapState) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
   presets?: readonly LanePreset[];
   onSavePreset?: (name: string) => void;
   onDeletePreset?: (id: string) => void;
@@ -34,6 +38,10 @@ export function LaneMapper({
   sourceKeyCount,
   targetKeyCount,
   onChange,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
   presets,
   onSavePreset,
   onDeletePreset,
@@ -92,6 +100,24 @@ export function LaneMapper({
           )}
         </div>
         <div className="lane-mapper-actions">
+          <button
+            type="button"
+            className="lane-action-btn"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Deshacer (Ctrl + Z)"
+          >
+            <Undo2 size={13} />
+          </button>
+          <button
+            type="button"
+            className="lane-action-btn"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="Rehacer (Ctrl + Shift + Z)"
+          >
+            <Redo2 size={13} />
+          </button>
           <button
             type="button"
             className="lane-action-btn"

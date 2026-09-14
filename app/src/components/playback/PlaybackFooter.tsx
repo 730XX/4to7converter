@@ -23,6 +23,8 @@ interface PlaybackFooterProps {
   onSplitSection?: () => void;
   onDeleteSection?: (sectionId: string) => void;
   onUpdateBoundary?: (leftSectionIndex: number, newCutTimeMs: number) => void;
+  beatDivisor?: number;
+  onChangeDivisor?: (divisor: number) => void;
 }
 
 const DENSITY_BINS = 120; // 120 barras de resolución a lo largo de la canción
@@ -42,6 +44,8 @@ export function PlaybackFooter({
   onSplitSection,
   onDeleteSection,
   onUpdateBoundary,
+  beatDivisor,
+  onChangeDivisor,
 }: PlaybackFooterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -205,11 +209,17 @@ export function PlaybackFooter({
         <TimelineSectionTrack
           sections={sections}
           activeSectionId={activeSectionId}
-          durationMs={playback.durationMs > 0 ? playback.durationMs : Math.max(beatmap.hitObjects.slice(-1)[0]?.timeMs ?? 1000, 1000)}
+          durationMs={
+            playback.durationMs > 0
+              ? playback.durationMs
+              : Math.max(beatmap.hitObjects.slice(-1)[0]?.timeMs ?? 1000, 1000)
+          }
           currentTimeMs={playback.timerTimeMs}
           onSelectSection={onSelectSection}
           onSplitAtCurrentTime={onSplitSection}
           onDeleteSection={onDeleteSection}
+          beatDivisor={beatDivisor}
+          onChangeDivisor={onChangeDivisor}
           onSeek={(timeMs) => playback.seekTo(timeMs)}
           onUpdateBoundary={onUpdateBoundary}
         />
@@ -230,20 +240,36 @@ export function PlaybackFooter({
         </span>
 
         {/* Contenedor interactivo del Timeline con Density Spectrum */}
-        <div
-          className="timeline-density-wrapper"
-          onClick={handleTimelineClick}
-        >
+        <div className="timeline-density-wrapper" onClick={handleTimelineClick}>
           <canvas ref={canvasRef} className="timeline-density-canvas" width={600} height={26} />
-          {playback.durationMs > 0 && speedEvents.map((event) => (
-            <span
-              key={`${event.kind}-${event.timeMs}-${event.ordinal}`}
-              className={`timing-event-marker timing-event-marker--${event.kind}`}
-              style={{ left: `${Math.max(0, Math.min(100, (event.timeMs / playback.durationMs) * 100))}%` }}
-              title={event.kind === "bpm" ? `BPM ${Math.round(event.value ?? 0)}` : event.kind === "sv" ? `SV ${(event.value ?? 1).toFixed(2)}x` : event.kind === "stop" ? "STOP" : "Invalid timing"}
-              aria-label={event.kind === "bpm" ? `BPM ${Math.round(event.value ?? 0)}` : event.kind === "sv" ? `SV ${(event.value ?? 1).toFixed(2)}x` : event.kind === "stop" ? "STOP" : "Invalid timing"}
-            />
-          ))}
+          {playback.durationMs > 0 &&
+            speedEvents.map((event) => (
+              <span
+                key={`${event.kind}-${event.timeMs}-${event.ordinal}`}
+                className={`timing-event-marker timing-event-marker--${event.kind}`}
+                style={{
+                  left: `${Math.max(0, Math.min(100, (event.timeMs / playback.durationMs) * 100))}%`,
+                }}
+                title={
+                  event.kind === "bpm"
+                    ? `BPM ${Math.round(event.value ?? 0)}`
+                    : event.kind === "sv"
+                      ? `SV ${(event.value ?? 1).toFixed(2)}x`
+                      : event.kind === "stop"
+                        ? "STOP"
+                        : "Invalid timing"
+                }
+                aria-label={
+                  event.kind === "bpm"
+                    ? `BPM ${Math.round(event.value ?? 0)}`
+                    : event.kind === "sv"
+                      ? `SV ${(event.value ?? 1).toFixed(2)}x`
+                      : event.kind === "stop"
+                        ? "STOP"
+                        : "Invalid timing"
+                }
+              />
+            ))}
           <input
             className="preview-slider timeline-density-slider"
             type="range"
@@ -278,7 +304,12 @@ export function PlaybackFooter({
           </button>
         )}
 
-        <button type="button" className="primary-button primary-button--icon" onClick={onExport} title="Exportar beatmap 7k (.osu)">
+        <button
+          type="button"
+          className="primary-button primary-button--icon"
+          onClick={onExport}
+          title="Exportar beatmap 7k (.osu)"
+        >
           <Download size={16} />
           <span>Exportar</span>
         </button>

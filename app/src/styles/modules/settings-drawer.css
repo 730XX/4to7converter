@@ -259,6 +259,25 @@
   accent-color: var(--color-accent);
 }
 
+.settings-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.settings-select:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.2);
+}
+
 .settings-segmented-control {
   display: flex;
   background: var(--color-surface-raised);

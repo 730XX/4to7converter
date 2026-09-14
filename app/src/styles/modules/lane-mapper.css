@@ -78,6 +78,18 @@
   transform: translateY(0);
 }
 
+.lane-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lane-action-btn:disabled:hover {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  background: rgba(255, 255, 255, 0.05);
+  transform: none;
+}
+
 .lane-mapper h2,
 .issues-panel h2 {
   margin: 0;

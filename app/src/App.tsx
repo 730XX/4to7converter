@@ -45,6 +45,7 @@ import {
   type LaneMapState,
 } from "./lib/lane-map-state";
 import { loadSettings, saveSettings, SETTINGS_LIMITS, type UserSettings } from "./lib/settings";
+import { useLaneDocHistory, type LaneDoc } from "./lib/use-lane-doc-history";
 import { getTimingSections, getKiaiIntervals, evaluateDynamicRhythm } from "./preview/beat-grid";
 import {
   deletePreset,
@@ -58,7 +59,6 @@ import { usePlayback } from "./lib/use-playback";
 import { loadRecentBeatmaps, saveRecentBeatmap } from "./lib/recent-beatmaps";
 import { formatTimeMs } from "./preview/preview-math";
 import {
-  type UiTimelineSection,
   createInitialSection,
   splitSectionAt,
   deleteSection,
@@ -116,9 +116,30 @@ export default function App() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [source, setSource] = useState<OsuBeatmap | null>(null);
   const [loadError, setLoadError] = useState<LoadError | null>(null);
-  const [laneMapState, setLaneMapState] = useState<LaneMapState>(
-    () => loadActiveLaneMapState() ?? createDefaultLaneMapState(),
+  // Historial (undo/redo) del documento del editor de carriles: mapeo + secciones + sección activa.
+  const initialLaneDoc = useMemo<LaneDoc>(
+    () => ({
+      laneMapState: loadActiveLaneMapState() ?? createDefaultLaneMapState(),
+      sections: [],
+      activeSectionId: null,
+      editedBeatmap: null,
+    }),
+    [],
   );
+  const {
+    doc,
+    commit: commitLaneDoc,
+    replace: replaceLaneDoc,
+    reset: resetLaneDoc,
+    undo: undoLaneDoc,
+    redo: redoLaneDoc,
+    canUndo,
+    canRedo,
+  } = useLaneDocHistory(initialLaneDoc);
+  const { laneMapState, sections, activeSectionId } = doc;
+  // Ediciones manuales del beatmap derivado (arrastrar notas en el editor).
+  const editedBeatmapRef = useRef(doc.editedBeatmap);
+  editedBeatmapRef.current = doc.editedBeatmap;
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [difficulties, setDifficulties] = useState<BeatmapDiffItem[]>([]);
   const [zeroLn, setZeroLn] = useState<boolean>(false);
@@ -137,13 +158,13 @@ export default function App() {
   const [osd, setOsd] = useState<OsdState | null>(null);
   const osdTimerRef = useRef<number | null>(null);
 
-  // Secciones temporales de la línea de tiempo
-  const [sections, setSections] = useState<UiTimelineSection[]>([]);
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  // Secciones temporales de la línea de tiempo (parte del documento con historial)
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
   const activeSectionIdRef = useRef(activeSectionId);
   activeSectionIdRef.current = activeSectionId;
+  const laneMapStateRef = useRef(laneMapState);
+  laneMapStateRef.current = laneMapState;
 
   // Clave de almacenamiento única para el mapa y dificultad actual
   const mapStorageKey = useMemo(() => {
@@ -157,16 +178,21 @@ export default function App() {
 
     const saved = loadMapSections(mapStorageKey);
     if (saved && saved.length > 0) {
-      setSections(saved);
-      setActiveSectionId(saved[0]?.id ?? null);
-      if (saved[0]) {
-        setLaneMapState(saved[0].laneMapState);
-      }
+      resetLaneDoc({
+        laneMapState: saved[0]?.laneMapState ?? createDefaultLaneMapState(),
+        sections: saved,
+        activeSectionId: saved[0]?.id ?? null,
+        editedBeatmap: null,
+      });
     } else {
       const lastTime = source.hitObjects.slice(-1)[0]?.timeMs ?? 10000;
-      const initial = createInitialSection(Math.max(lastTime, 10000), laneMapState);
-      setSections(initial);
-      setActiveSectionId(initial[0]?.id ?? null);
+      const initial = createInitialSection(Math.max(lastTime, 10000), laneMapStateRef.current);
+      resetLaneDoc({
+        laneMapState: laneMapStateRef.current,
+        sections: initial,
+        activeSectionId: initial[0]?.id ?? null,
+        editedBeatmap: null,
+      });
     }
   }, [mapStorageKey]);
 
@@ -216,6 +242,21 @@ export default function App() {
     osdTimerRef.current = window.setTimeout(() => {
       setOsd(null);
     }, 1800); // 1.8 segundos para poder visualizarlo con calma
+  }
+
+  /**
+   * Descarta las ediciones manuales del beatmap derivado cuando el mapeo de
+   * carriles cambia (la base se regenera). Avisa por OSD y devuelve true si
+   * había ediciones que descartar.
+   */
+  function discardManualEdits(): boolean {
+    if (editedBeatmapRef.current === null) return false;
+    triggerOsd({
+      type: "generic",
+      title: "Mapeo actualizado",
+      message: "Se descartaron tus ediciones manuales",
+    });
+    return true;
   }
 
   useEffect(() => {
@@ -273,6 +314,23 @@ export default function App() {
 
       // Ignorar si el usuario está escribiendo en un input
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Ctrl + Z / Ctrl + Shift + Z (o Ctrl + Y): Deshacer / Rehacer en el editor de carriles
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redoLaneDoc();
+        } else {
+          undoLaneDoc();
+        }
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.code === "KeyY") {
+        event.preventDefault();
+        redoLaneDoc();
         return;
       }
 
@@ -560,10 +618,14 @@ export default function App() {
       // Inicializar una sección inicial para toda la canción
       const initialSecs = createInitialSection(
         Math.max(parsed.hitObjects.slice(-1)[0]?.timeMs ?? 300000, 10000),
-        laneMapState,
+        laneMapStateRef.current,
       );
-      setSections(initialSecs);
-      setActiveSectionId(initialSecs[0]?.id ?? null);
+      resetLaneDoc({
+        laneMapState: laneMapStateRef.current,
+        sections: initialSecs,
+        activeSectionId: initialSecs[0]?.id ?? null,
+        editedBeatmap: null,
+      });
     } catch (error) {
       console.error("Error al cargar beatmap desde path:", error);
       if (error instanceof OsuParseError || error instanceof ConversionError) {
@@ -612,9 +674,13 @@ export default function App() {
       setAudioUrl(null);
       setIsFileModalOpen(false);
 
-      const initialSecs = createInitialSection(300000, laneMapState);
-      setSections(initialSecs);
-      setActiveSectionId(initialSecs[0]?.id ?? null);
+      const initialSecs = createInitialSection(300000, laneMapStateRef.current);
+      resetLaneDoc({
+        laneMapState: laneMapStateRef.current,
+        sections: initialSecs,
+        activeSectionId: initialSecs[0]?.id ?? null,
+        editedBeatmap: null,
+      });
     } catch (error) {
       if (error instanceof OsuParseError || error instanceof ConversionError) {
         setLoadError({ message: error.message, code: error.code });
@@ -644,9 +710,12 @@ export default function App() {
     setLoadError(null);
     setAudioUrl(null);
     setBackgroundUrl(null);
-    setLaneMapState(createDefaultLaneMapState());
-    setSections([]);
-    setActiveSectionId(null);
+    resetLaneDoc({
+      laneMapState: createDefaultLaneMapState(),
+      sections: [],
+      activeSectionId: null,
+      editedBeatmap: null,
+    });
   }
 
   // Mantener el ref de handleReset actualizado para el atajo ESC (sin closures viejos).
@@ -670,12 +739,14 @@ export default function App() {
     );
 
     if (createdSectionId !== null) {
-      setSections(newSections);
-      setActiveSectionId(createdSectionId);
       const createdSec = newSections.find((s) => s.id === createdSectionId);
-      if (createdSec) {
-        setLaneMapState(createdSec.laneMapState);
-      }
+      discardManualEdits();
+      commitLaneDoc({
+        sections: newSections,
+        activeSectionId: createdSectionId,
+        laneMapState: createdSec?.laneMapState ?? laneMapStateRef.current,
+        editedBeatmap: null,
+      });
       triggerOsd({
         type: "generic",
         title: "Sección dividida",
@@ -685,25 +756,24 @@ export default function App() {
   }
 
   function handleSelectSection(sectionId: string): void {
-    setActiveSectionId(sectionId);
     const sec = sections.find((s) => s.id === sectionId);
-    if (sec) {
-      setLaneMapState(sec.laneMapState);
-    }
+    replaceLaneDoc({
+      activeSectionId: sectionId,
+      laneMapState: sec?.laneMapState ?? laneMapState,
+    });
   }
 
   function handleDeleteSection(sectionId: string): void {
     const updated = deleteSection(sections, sectionId);
-    setSections(updated);
-    if (activeSectionId === sectionId) {
-      const fallback = updated[0];
-      if (fallback) {
-        setActiveSectionId(fallback.id);
-        setLaneMapState(fallback.laneMapState);
-      } else {
-        setActiveSectionId(null);
-      }
-    }
+    const isRemovingActive = activeSectionId === sectionId;
+    const fallback = updated[0];
+    discardManualEdits();
+    commitLaneDoc({
+      sections: updated,
+      activeSectionId: isRemovingActive ? (fallback?.id ?? null) : activeSectionId,
+      laneMapState: isRemovingActive ? (fallback?.laneMapState ?? laneMapState) : laneMapState,
+      editedBeatmap: null,
+    });
     triggerOsd({
       type: "generic",
       title: "Sección eliminada",
@@ -713,16 +783,28 @@ export default function App() {
 
   function handleUpdateBoundary(leftSectionIndex: number, newCutTimeMs: number): void {
     const updated = updateSectionBoundary(sections, leftSectionIndex, newCutTimeMs);
-    setSections(updated);
+    discardManualEdits();
+    commitLaneDoc({ sections: updated, editedBeatmap: null }, { coalesceKey: "boundary" });
   }
 
   function handleLaneMapChange(nextState: LaneMapState): void {
-    setLaneMapState(nextState);
-    if (activeSectionId && sections.length > 0) {
-      setSections((prev) =>
-        prev.map((s) => (s.id === activeSectionId ? { ...s, laneMapState: nextState } : s)),
-      );
+    const updatedSections =
+      activeSectionId && sections.length > 0
+        ? sections.map((s) => (s.id === activeSectionId ? { ...s, laneMapState: nextState } : s))
+        : sections;
+    discardManualEdits();
+    commitLaneDoc(
+      { laneMapState: nextState, sections: updatedSections, editedBeatmap: null },
+      { coalesceKey: "laneMap" },
+    );
+  }
+
+  function handleToggleZeroLn(nextZeroLn: boolean): void {
+    if (editedBeatmapRef.current !== null) {
+      discardManualEdits();
+      commitLaneDoc({ editedBeatmap: null });
     }
+    setZeroLn(nextZeroLn);
   }
 
   const converted = useMemo(
@@ -738,9 +820,13 @@ export default function App() {
     [source, laneMapState, zeroLn, sections],
   );
 
+  // Documento efectivo del editor: la conversión derivada, o las ediciones
+  // manuales del usuario cuando existen (Opción A).
+  const effectiveConverted = doc.editedBeatmap ?? converted;
+
   const issues = useMemo<ConversionIssue[]>(
-    () => (converted === null ? [] : validateConvertedBeatmap(converted)),
-    [converted],
+    () => (effectiveConverted === null ? [] : validateConvertedBeatmap(effectiveConverted)),
+    [effectiveConverted],
   );
 
   // Valores por defecto del modal de exportación, derivados del mapa cargado.
@@ -749,15 +835,15 @@ export default function App() {
     const suffix = rawSuffix && rawSuffix.length > 0 ? rawSuffix : "(7K)";
     const version7k = source?.version ? `${source.version} ${suffix}` : suffix;
     return {
-      title: source?.title ?? converted?.title ?? "",
-      artist: source?.artist ?? converted?.artist ?? "",
-      creator: source?.creator ?? converted?.creator ?? "",
+      title: source?.title ?? effectiveConverted?.title ?? "",
+      artist: source?.artist ?? effectiveConverted?.artist ?? "",
+      creator: source?.creator ?? effectiveConverted?.creator ?? "",
       version: version7k,
-      overallDifficulty: converted?.overallDifficulty ?? source?.overallDifficulty ?? 7,
-      hpDrainRate: converted?.hpDrainRate ?? source?.hpDrainRate ?? 7,
-      previewTime: converted?.previewTime ?? source?.previewTime ?? -1,
+      overallDifficulty: effectiveConverted?.overallDifficulty ?? source?.overallDifficulty ?? 7,
+      hpDrainRate: effectiveConverted?.hpDrainRate ?? source?.hpDrainRate ?? 7,
+      previewTime: effectiveConverted?.previewTime ?? source?.previewTime ?? -1,
     };
-  }, [source, converted, settings.diffSuffix]);
+  }, [source, effectiveConverted, settings.diffSuffix]);
 
   // Detección de carga de la escena: el velo se desvanece recién cuando la vista
   // entrante está lista (home local = tras unos frames; editor = fondo cargado).
@@ -779,7 +865,7 @@ export default function App() {
     }
 
     // Vista editor: esperar a que la imagen de fondo termine de cargar (la que más tarda).
-    if (converted !== null && fileName !== null) {
+    if (effectiveConverted !== null && fileName !== null) {
       if (backgroundUrl) {
         preloadImage(backgroundUrl).then(() => {
           if (!cancelled) setIsSceneReady(true);
@@ -802,7 +888,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [source, converted, fileName, backgroundUrl]);
+  }, [source, effectiveConverted, fileName, backgroundUrl]);
 
   // Precarga en background las covers de los mapas recientes para que, al volver al
   // home, ya estén cacheadas y no aparezcan "de golpe" tras la transición.
@@ -828,7 +914,7 @@ export default function App() {
   );
 
   const playback = usePlayback({
-    beatmap: converted ?? EMPTY_BEATMAP,
+    beatmap: effectiveConverted ?? EMPTY_BEATMAP,
     audioUrl,
     volume: settings.volume,
     hitsoundsEnabled: settings.hitsounds,
@@ -845,8 +931,10 @@ export default function App() {
     const matchingSection = sections.find((sec) => curTime >= sec.startMs && curTime < sec.endMs);
 
     if (matchingSection && matchingSection.id !== activeSectionId) {
-      setActiveSectionId(matchingSection.id);
-      setLaneMapState(matchingSection.laneMapState);
+      replaceLaneDoc({
+        activeSectionId: matchingSection.id,
+        laneMapState: matchingSection.laneMapState,
+      });
     }
   }, [playback.timerTimeMs, sections, activeSectionId]);
 
@@ -907,38 +995,41 @@ export default function App() {
   }
 
   function handleApplyPreset(preset: LanePreset): void {
-    setLaneMapState(preset.laneMapState);
-    if (activeSectionId && sections.length > 0) {
-      setSections((prev) =>
-        prev.map((s) =>
-          s.id === activeSectionId
-            ? {
-                ...s,
-                laneMapState: preset.laneMapState,
-                presetId: preset.id,
-                presetName: preset.name,
-              }
-            : s,
-        ),
-      );
-    }
+    const updatedSections =
+      activeSectionId && sections.length > 0
+        ? sections.map((s) =>
+            s.id === activeSectionId
+              ? {
+                  ...s,
+                  laneMapState: preset.laneMapState,
+                  presetId: preset.id,
+                  presetName: preset.name,
+                }
+              : s,
+          )
+        : sections;
+    discardManualEdits();
+    commitLaneDoc(
+      { laneMapState: preset.laneMapState, sections: updatedSections, editedBeatmap: null },
+      { coalesceKey: "preset" },
+    );
   }
 
   function handleExport(): void {
-    if (source === null || converted === null || fileName === null) {
+    if (source === null || effectiveConverted === null || fileName === null) {
       return;
     }
     setIsExportModalOpen(true);
   }
 
   async function performExport(meta: ExportMetadata): Promise<void> {
-    if (source === null || converted === null || fileName === null) {
+    if (source === null || effectiveConverted === null || fileName === null) {
       return;
     }
 
     const version7k = meta.version.trim().length > 0 ? meta.version.trim() : "(7K)";
     const exportBeatmap: OsuBeatmap = {
-      ...converted,
+      ...effectiveConverted,
       title: meta.title,
       artist: meta.artist,
       creator: meta.creator,
@@ -966,7 +1057,7 @@ export default function App() {
         const newPath = `${dir}\\${newFileName}`;
 
         await saveBeatmap(newPath, content);
-        recordConversionMetric(meta.title || fileName, converted?.hitObjects.length || 0);
+        recordConversionMetric(meta.title || fileName, effectiveConverted.hitObjects.length);
         appLogger.info(`[Export] ¡Mapa 7K guardado exitosamente en: ${newPath}`);
         triggerOsd({
           type: "export",
@@ -1021,7 +1112,7 @@ export default function App() {
     );
   }
 
-  if (source === null || converted === null || fileName === null) {
+  if (source === null || effectiveConverted === null || fileName === null) {
     return (
       <>
         <HomeScreen
@@ -1086,7 +1177,7 @@ export default function App() {
               sourcePath={sourcePath}
               difficulties={difficulties}
               zeroLn={zeroLn}
-              onToggleZeroLn={setZeroLn}
+              onToggleZeroLn={handleToggleZeroLn}
               onSelectDifficulty={(newPath) => void handlePathSelected(newPath)}
               onOpenNewFile={() => {
                 playback.pause();
@@ -1102,6 +1193,10 @@ export default function App() {
               sourceKeyCount={source.keyCount}
               targetKeyCount={TARGET_KEY_COUNT}
               onChange={handleLaneMapChange}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onUndo={undoLaneDoc}
+              onRedo={redoLaneDoc}
               presets={presets}
               onSavePreset={handleSavePreset}
               onDeletePreset={handleDeletePreset}
@@ -1111,7 +1206,7 @@ export default function App() {
             />
             <StatsBar
               source={source}
-              converted={converted}
+              converted={effectiveConverted}
               targetColumnCounts={targetColumnCounts}
               issueCounts={issueCounts}
               playback={playback}
@@ -1121,8 +1216,9 @@ export default function App() {
           <section className="app-canvas-panel">
             <Playfield
               sourceBeatmap={source}
-              targetBeatmap={converted}
+              targetBeatmap={effectiveConverted}
               playback={playback}
+              onEditNotes={(next) => commitLaneDoc({ editedBeatmap: next })}
               scrollSpeed={settings.scrollSpeed}
               playfieldWidth={settings.playfieldWidth}
               scrollDirection={settings.scrollDirection}
@@ -1141,13 +1237,14 @@ export default function App() {
               hitPositionOffset={settings.hitPositionOffset}
               receptorOffset={settings.receptorOffset}
               customSkinTextures={customSkinTextures}
+              beatDivisor={settings.beatDivisor}
               onExitPlayMode={() => setIsPlayMode(false)}
             />
           </section>
         </div>
         <PlaybackFooter
           playback={playback}
-          beatmap={converted ?? source}
+          beatmap={effectiveConverted ?? source}
           onExport={handleExport}
           isPlayMode={isPlayMode}
           onTogglePlayMode={() => {
@@ -1165,6 +1262,8 @@ export default function App() {
           onSplitSection={handleSplitSection}
           onDeleteSection={handleDeleteSection}
           onUpdateBoundary={handleUpdateBoundary}
+          beatDivisor={settings.beatDivisor}
+          onChangeDivisor={(divisor) => setSettings((prev) => ({ ...prev, beatDivisor: divisor }))}
         />
       </main>
 

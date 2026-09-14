@@ -4,16 +4,20 @@
  */
 export const SETTINGS_LIMITS = {
   scrollSpeed: { min: 10, max: 60, step: 1, default: 25 },
-  volume: { min: 0, max: 100, step: 1, default: 40, },
-  hitsoundVolume: { min: 0, max: 100, step: 1, default: 20, },
-  backdropDim: { min: 0, max: 100, step: 5, default: 60, },
-  playOffsetMs: { min: -150, max: 150, step: 5, default: 0, },
-  comboPositionPercent: { min: 30, max: 85, step: 1, default: 55, },
-  noteHeight: { min: 10, max: 36, step: 1, default: 16, },
-  playStageWidth: { min: 320, max: 800, step: 10, default: 500, },
-  hitPositionOffset: { min: 20, max: 180, step: 5, default: 40, },
-  receptorOffset: { min: -120, max: 120, step: 2, default: 0, },
+  volume: { min: 0, max: 100, step: 1, default: 40 },
+  hitsoundVolume: { min: 0, max: 100, step: 1, default: 20 },
+  backdropDim: { min: 0, max: 100, step: 5, default: 60 },
+  playOffsetMs: { min: -150, max: 150, step: 5, default: 0 },
+  comboPositionPercent: { min: 30, max: 85, step: 1, default: 55 },
+  noteHeight: { min: 10, max: 36, step: 1, default: 16 },
+  playStageWidth: { min: 320, max: 800, step: 10, default: 500 },
+  hitPositionOffset: { min: 20, max: 180, step: 5, default: 40 },
+  receptorOffset: { min: -120, max: 120, step: 2, default: 0 },
+  beatDivisor: { min: 1, max: 8, step: 1, default: 1 },
 } as const;
+
+/** Divisores de beat válidos para las líneas guía del editor (líneas por beat). */
+export const BEAT_DIVISORS = [1, 2, 3, 4, 6, 8] as const;
 
 /**
  * Preferencias globales del usuario persistidas en localStorage.
@@ -39,6 +43,7 @@ export interface UserSettings {
   hitPositionOffset: number; // Distancia de la línea de juicio desde el borde en px (20 a 180, default: 40)
   receptorOffset: number; // Desplazamiento vertical de los sprites de receptores en px (-120 a 120, default: 0)
   selectedSkinPath: string | null; // Ruta absoluta de la skin de osu! seleccionada (null = skin nativa)
+  beatDivisor: number; // Líneas guía por beat en el editor (1 = beats/medidas, 4 = 1/4, etc.)
 }
 
 export const DEFAULT_KEYBINDS_7K: string[] = [
@@ -72,6 +77,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   hitPositionOffset: SETTINGS_LIMITS.hitPositionOffset.default,
   receptorOffset: SETTINGS_LIMITS.receptorOffset.default,
   selectedSkinPath: null,
+  beatDivisor: SETTINGS_LIMITS.beatDivisor.default,
 };
 
 /**
@@ -141,6 +147,10 @@ export function loadSettings(): UserSettings {
         typeof parsed.hitPositionOffset === "number" && !isNaN(parsed.hitPositionOffset)
           ? parsed.hitPositionOffset
           : DEFAULT_SETTINGS.hitPositionOffset,
+      beatDivisor:
+        typeof parsed.beatDivisor === "number" && !isNaN(parsed.beatDivisor)
+          ? parsed.beatDivisor
+          : DEFAULT_SETTINGS.beatDivisor,
     };
   } catch {
     return DEFAULT_SETTINGS;

@@ -19,6 +19,11 @@ export interface SpeedTimelineEvent {
 export interface SpeedTimeline {
   speedAt(timeMs: number): number;
   distanceBetween(startMs: number, endMs: number): number;
+  /**
+   * Inverso de `distanceBetween`: tiempo en el que se acumula `distance` desde
+   * `fromTimeMs`. Distancias negativas retroceden en el tiempo.
+   */
+  timeAtDistance(fromTimeMs: number, distance: number): number;
   stateAt(timeMs: number): SpeedTimelineState;
   eventsBetween(startMs?: number, endMs?: number): SpeedTimelineEvent[];
   readonly events: readonly SpeedTimelineEvent[];
@@ -89,7 +94,7 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
   for (const { point } of sorted) {
     const isBpm = point.uninherited;
     const isSv = !point.uninherited;
-    
+
     // En osu!mania los mappers usan beatLength <= 0 en puntos uninherited (rojos),
     // o BPMs inferiores a 2 (beatLength > 30000), para generar stops o congelamientos.
     const isExplicitStop = isBpm && Number.isFinite(point.beatLength) && point.beatLength <= 0;
@@ -98,23 +103,53 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
 
     if (isExplicitStop) {
       state = { ...state, bpm: 0, mode: "stop" };
-      events.push({ timeMs: point.offsetMs, kind: "stop", value: 0, state, ordinal: events.length });
+      events.push({
+        timeMs: point.offsetMs,
+        kind: "stop",
+        value: 0,
+        state,
+        ordinal: events.length,
+      });
     } else if (isValidPositiveBpm) {
       const calculatedBpm = 60000 / point.beatLength;
       if (calculatedBpm < 2) {
         // Truco de mappers: BPM casi 0 (ej: 0.1 o 1 BPM) para congelar la pantalla
         state = { ...state, bpm: calculatedBpm, mode: "stop" };
-        events.push({ timeMs: point.offsetMs, kind: "stop", value: calculatedBpm, state, ordinal: events.length });
+        events.push({
+          timeMs: point.offsetMs,
+          kind: "stop",
+          value: calculatedBpm,
+          state,
+          ordinal: events.length,
+        });
       } else {
         state = { ...state, bpm: calculatedBpm, mode: "bpm" };
-        events.push({ timeMs: point.offsetMs, kind: "bpm", value: state.bpm, state, ordinal: events.length });
+        events.push({
+          timeMs: point.offsetMs,
+          kind: "bpm",
+          value: state.bpm,
+          state,
+          ordinal: events.length,
+        });
       }
     } else if (isValidSv) {
       state = { ...state, svMultiplier: 100 / Math.abs(point.beatLength) };
       state = { ...state, mode: "sv" };
-      events.push({ timeMs: point.offsetMs, kind: "sv", value: state.svMultiplier, state, ordinal: events.length });
+      events.push({
+        timeMs: point.offsetMs,
+        kind: "sv",
+        value: state.svMultiplier,
+        state,
+        ordinal: events.length,
+      });
     } else {
-      events.push({ timeMs: point.offsetMs, kind: "invalid", value: null, state, ordinal: events.length });
+      events.push({
+        timeMs: point.offsetMs,
+        kind: "invalid",
+        value: null,
+        state,
+        ordinal: events.length,
+      });
     }
   }
 
@@ -161,7 +196,9 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
   const stateAt = (timeMs: number): SpeedTimelineState => {
     if (!finiteTime(timeMs)) return { ...DEFAULT_STATE, ...initialState };
     if (segments.length === 0 || timeMs < segments[0]!.startMs) return initialState;
-    return segments[Math.min(segments.length - 1, upperBound(segments, timeMs, (segment) => segment.startMs) - 1)]!.state;
+    return segments[
+      Math.min(segments.length - 1, upperBound(segments, timeMs, (segment) => segment.startMs) - 1)
+    ]!.state;
   };
 
   const speedAt = (timeMs: number): number => {
@@ -171,6 +208,46 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
   const distanceBetween = (startMs: number, endMs: number): number => {
     if (!finiteTime(startMs) || !finiteTime(endMs) || startMs === endMs) return 0;
     return cumulativeDistanceAt(endMs) - cumulativeDistanceAt(startMs);
+  };
+
+  const timeAtDistance = (fromTimeMs: number, distance: number): number => {
+    if (!finiteTime(fromTimeMs) || !finiteTime(distance)) {
+      return finiteTime(fromTimeMs) ? fromTimeMs : 0;
+    }
+    const target = cumulativeDistanceAt(fromTimeMs) + distance;
+    const fallbackStart = segments[0]?.startMs ?? 0;
+    if (!finiteTime(target)) {
+      return fallbackStart;
+    }
+
+    // Sin segmentos la línea es lineal desde 0 con el factor inicial.
+    if (segments.length === 0) {
+      const factor = visualFactor(initialState, referenceBpm);
+      return factor === 0 ? fallbackStart : target / factor;
+    }
+
+    // Antes del primer segmento rige el factor inicial (previo a todo evento).
+    const firstDistance = segments[0]!.distanceAtStart;
+    if (target < firstDistance) {
+      const factor = visualFactor(initialState, referenceBpm);
+      if (factor === 0) return segments[0]!.startMs;
+      return segments[0]!.startMs + (target - firstDistance) / factor;
+    }
+
+    // Primer segmento cuya distancia acumulada alcanza el objetivo. En regiones
+    // planas (STOP, factor 0) varias entradas comparten distancia: se devuelve la
+    // más temprana, que es justo el `startMs` de la primera coincidencia exacta.
+    const index = lowerBound(segments, target, (segment) => segment.distanceAtStart);
+    if (index < segments.length && segments[index]!.distanceAtStart === target) {
+      return segments[index]!.startMs;
+    }
+
+    const segmentIndex = Math.max(0, Math.min(segments.length - 1, index - 1));
+    const segment = segments[segmentIndex]!;
+    if (segment.factor === 0) {
+      return segment.startMs;
+    }
+    return segment.startMs + (target - segment.distanceAtStart) / segment.factor;
   };
 
   // Precompute max speed factor across all segments for worst-case window calculations
@@ -183,6 +260,7 @@ export function buildSpeedTimeline(timingPoints: TimingPoint[]): SpeedTimeline {
   return {
     speedAt,
     distanceBetween,
+    timeAtDistance,
     stateAt,
     eventsBetween: (startMs = -Infinity, endMs = Infinity) => {
       if (events.length === 0) return [];

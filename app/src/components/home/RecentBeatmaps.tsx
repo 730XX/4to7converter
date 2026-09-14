@@ -44,7 +44,7 @@ interface RecentBeatmapsProps {
     isBmsMode: boolean,
     audioElement: HTMLAudioElement | null,
     isPlaying: boolean,
-    audioPlayer?: AudioPlayer | null
+    audioPlayer?: AudioPlayer | null,
   ) => void;
 }
 
@@ -79,7 +79,6 @@ export function RecentBeatmaps({
   const [bmsPalette, setBmsPalette] = useState<VisualizerPalette | null>(null);
   const [isPreviewMuted, setIsPreviewMuted] = useState(false);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
-  const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
   const [rawHitObjectTimes, setRawHitObjectTimes] = useState<number[]>([]);
   const [timingPoints, setTimingPoints] = useState<TimingPoint[]>([]);
@@ -97,6 +96,34 @@ export function RecentBeatmaps({
   const fadeIntervalRef = useRef<number | null>(null);
   const isDraggingScrubberRef = useRef(false);
   const carouselCardRef = useRef<HTMLDivElement | null>(null);
+  // El progreso (timer + barra + waveform) se actualiza por refs dentro del rAF,
+  // sin re-render de React por frame (evita saturar el hilo y trabar la barra).
+  const durationSecRef = useRef(0);
+  durationSecRef.current = durationSec;
+  const timeCurrentRef = useRef<HTMLSpanElement | null>(null);
+  const waveProgressRectRef = useRef<SVGRectElement | null>(null);
+  const scrubberFillRef = useRef<HTMLDivElement | null>(null);
+  const scrubberRef = useRef<HTMLDivElement | null>(null);
+
+  /** Refleja el tiempo de reproducción en el timer, la barra y el clip del waveform. */
+  function applyProgress(seconds: number): void {
+    const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    if (timeCurrentRef.current) {
+      const total = Math.floor(safeSeconds);
+      timeCurrentRef.current.textContent = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    }
+    const duration = durationSecRef.current;
+    const pct = duration > 0 ? Math.min(100, Math.max(0, (safeSeconds / duration) * 100)) : 0;
+    if (scrubberFillRef.current) {
+      scrubberFillRef.current.style.width = `${pct}%`;
+    }
+    if (waveProgressRectRef.current) {
+      waveProgressRectRef.current.setAttribute("width", String((pct / 100) * 1000));
+    }
+    if (scrubberRef.current) {
+      scrubberRef.current.setAttribute("aria-valuenow", String(Math.round(safeSeconds)));
+    }
+  }
 
   // Asegurar que carouselIndex siempre esté dentro de rango
   useEffect(() => {
@@ -106,7 +133,9 @@ export function RecentBeatmaps({
   }, [maps.length, carouselIndex]);
 
   const activeBmsMap = maps[carouselIndex] ?? maps[0] ?? null;
-  const activeBmsBgUrl = activeBmsMap?.backgroundPath ? toAssetUrl(activeBmsMap.backgroundPath) : null;
+  const activeBmsBgUrl = activeBmsMap?.backgroundPath
+    ? toAssetUrl(activeBmsMap.backgroundPath)
+    : null;
 
   const onBmsStateChangeRef = useRef(onBmsStateChange);
   useEffect(() => {
@@ -120,7 +149,7 @@ export function RecentBeatmaps({
       layoutMode === "bms",
       null,
       isPlayingPreview && !isPreviewMuted,
-      audioPlayer || playerRef.current
+      audioPlayer || playerRef.current,
     );
   }, [activeBmsMap, layoutMode, audioPlayer, isPlayingPreview, isPreviewMuted]);
 
@@ -146,8 +175,9 @@ export function RecentBeatmaps({
         playerRef.current = null;
         setAudioPlayer(null);
         setIsPlayingPreview(false);
-        setCurrentTimeSec(0);
+        applyProgress(0);
         setDurationSec(0);
+        durationSecRef.current = 0;
       }
       setRawHitObjectTimes([]);
       setTimingPoints([]);
@@ -203,14 +233,15 @@ export function RecentBeatmaps({
 
         const durationInSec = durationMs / 1000;
         setDurationSec(durationInSec);
+        durationSecRef.current = durationInSec;
 
         if (previewSec > 0 && durationInSec > 0 && previewSec < durationInSec) {
           const startMs = previewSec * 1000;
           player.seek(startMs);
-          setCurrentTimeSec(previewSec);
+          applyProgress(previewSec);
         } else {
           player.seek(0);
-          setCurrentTimeSec(0);
+          applyProgress(0);
         }
 
         await player.play();
@@ -227,11 +258,13 @@ export function RecentBeatmaps({
 
         for (const adj of adjacentMaps) {
           if (adj?.path && adj.path !== activeBmsMap.path) {
-            void loadBeatmapWithAudio(adj.path).then((res) => {
-              if (res.audioPath) {
-                prefetchAudio(toAudioUrl(res.audioPath));
-              }
-            }).catch(() => {});
+            void loadBeatmapWithAudio(adj.path)
+              .then((res) => {
+                if (res.audioPath) {
+                  prefetchAudio(toAudioUrl(res.audioPath));
+                }
+              })
+              .catch(() => {});
           }
         }
       } catch (err) {
@@ -300,6 +333,12 @@ export function RecentBeatmaps({
     const bgaContainer = document.querySelector<HTMLElement>(".home-bga-container");
     const baseBrightness = 0.35;
     const baseBlur = 45;
+    // Evitar reescribir las CSS vars cuando no cambian: cada escritura fuerza
+    // recalcular el blur a pantalla completa del fondo (muy costoso).
+    let lastBrightness = Number.NaN;
+    let lastBlur = Number.NaN;
+    let lastFlash = Number.NaN;
+    let lastKiaiActive: boolean | null = null;
 
     function animateKiai(): void {
       if (playerRef.current) {
@@ -331,25 +370,30 @@ export function RecentBeatmaps({
         effectiveBrightness = Math.max(0.04, effectiveBrightness);
 
         if (bgaContainer) {
-          bgaContainer.style.setProperty("--home-bga-brightness", effectiveBrightness.toFixed(3));
-          bgaContainer.style.setProperty("--home-bga-blur", `${effectiveBlur}px`);
+          if (Math.abs(effectiveBrightness - lastBrightness) >= 0.01) {
+            bgaContainer.style.setProperty("--home-bga-brightness", effectiveBrightness.toFixed(3));
+            lastBrightness = effectiveBrightness;
+          }
+          const roundedBlur = Math.round(effectiveBlur);
+          if (roundedBlur !== lastBlur) {
+            bgaContainer.style.setProperty("--home-bga-blur", `${roundedBlur}px`);
+            lastBlur = roundedBlur;
+          }
         }
 
         if (carouselCardRef.current) {
-          carouselCardRef.current.style.setProperty(
-            "--bms-kiai-flash",
-            flashIntensity.toFixed(3),
-          );
-          carouselCardRef.current.style.setProperty(
-            "--bms-kiai-active",
-            isInKiai ? "1" : "0",
-          );
+          if (Math.abs(flashIntensity - lastFlash) >= 0.01) {
+            carouselCardRef.current.style.setProperty(
+              "--bms-kiai-flash",
+              flashIntensity.toFixed(3),
+            );
+            lastFlash = flashIntensity;
+          }
+          if (isInKiai !== lastKiaiActive) {
+            carouselCardRef.current.style.setProperty("--bms-kiai-active", isInKiai ? "1" : "0");
+            lastKiaiActive = isInKiai;
+          }
         }
-      }
-
-      if (playerRef.current && !isDraggingScrubberRef.current) {
-        const curSec = playerRef.current.getCurrentTimeMs() / 1000;
-        setCurrentTimeSec(curSec);
       }
 
       animId = requestAnimationFrame(animateKiai);
@@ -371,6 +415,22 @@ export function RecentBeatmaps({
     };
   }, [isPlayingPreview, isPreviewMuted, layoutMode, timingSections, kiaiIntervals]);
 
+  // Actualizar el tiempo de reproducción (timer + barra de progreso) en su PROPIO loop,
+  // independiente de la animación de Kiai: no debe congelarse al mutear ni depender de
+  // que existan secciones de timing uninherited.
+  useEffect(() => {
+    if (!isPlayingPreview || layoutMode !== "bms") return;
+    let animId: number;
+    function updateProgress(): void {
+      if (playerRef.current && !isDraggingScrubberRef.current) {
+        applyProgress(playerRef.current.getCurrentTimeMs() / 1000);
+      }
+      animId = requestAnimationFrame(updateProgress);
+    }
+    animId = requestAnimationFrame(updateProgress);
+    return () => cancelAnimationFrame(animId);
+  }, [isPlayingPreview, layoutMode]);
+
   // Generar las trayectorias SVG continuas (Bézier Spline)
   const svgPaths = useMemo(() => {
     if (!npsData || npsData.normalizedPoints.length === 0) return null;
@@ -384,7 +444,7 @@ export function RecentBeatmaps({
     const targetPercent = clickX / rect.width;
     const targetTime = targetPercent * durationSec;
     playerRef.current.seek(targetTime * 1000);
-    setCurrentTimeSec(targetTime);
+    applyProgress(targetTime);
   }
 
   function handleScrubberMouseMove(e: React.MouseEvent<HTMLDivElement>) {
@@ -532,12 +592,7 @@ export function RecentBeatmaps({
               >
                 <div className="home-track-jacket-wrap">
                   {bgUrl ? (
-                    <img
-                      src={bgUrl}
-                      alt=""
-                      className="home-track-jacket-img"
-                      loading="lazy"
-                    />
+                    <img src={bgUrl} alt="" className="home-track-jacket-img" loading="lazy" />
                   ) : (
                     <div
                       className="home-track-jacket-placeholder"
@@ -562,9 +617,7 @@ export function RecentBeatmaps({
                     <span className="home-track-artist" title={map.artist}>
                       {map.artist}
                     </span>
-                    <span className="home-track-diff-tag">
-                      [{map.difficulty}]
-                    </span>
+                    <span className="home-track-diff-tag">[{map.difficulty}]</span>
                   </div>
 
                   <div className="home-track-meta-row mono">
@@ -573,7 +626,9 @@ export function RecentBeatmaps({
                 </div>
 
                 <div className="home-track-side-meta">
-                  <span className={`home-track-key-pill mono ${map.keys === 4 ? "is-4k" : "is-7k"}`}>
+                  <span
+                    className={`home-track-key-pill mono ${map.keys === 4 ? "is-4k" : "is-7k"}`}
+                  >
                     {map.keys}K
                   </span>
                   <span className="home-track-bpm mono">{map.bpm} BPM</span>
@@ -606,26 +661,31 @@ export function RecentBeatmaps({
             style={
               {
                 "--bms-accent": bmsPalette ? `rgb(${bmsPalette.centerRgb.join(",")})` : "#38bdf8",
-                "--bms-accent-edge": bmsPalette ? `rgb(${bmsPalette.edgeRgb.join(",")})` : "#818cf8",
-                "--bms-accent-bg": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.14)` : "rgba(56, 189, 248, 0.12)",
-                "--bms-accent-border": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.35)` : "rgba(56, 189, 248, 0.3)",
-                "--bms-accent-glow": bmsPalette ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.8)` : "rgba(56, 189, 248, 0.8)",
+                "--bms-accent-edge": bmsPalette
+                  ? `rgb(${bmsPalette.edgeRgb.join(",")})`
+                  : "#818cf8",
+                "--bms-accent-bg": bmsPalette
+                  ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.14)`
+                  : "rgba(56, 189, 248, 0.12)",
+                "--bms-accent-border": bmsPalette
+                  ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.35)`
+                  : "rgba(56, 189, 248, 0.3)",
+                "--bms-accent-glow": bmsPalette
+                  ? `rgba(${bmsPalette.centerRgb.join(",")}, 0.8)`
+                  : "rgba(56, 189, 248, 0.8)",
               } as React.CSSProperties
             }
           >
             {/* Portada / Jacket Gigante con Scanlines y Viñeta */}
             <div className="home-bms-jacket-viewport">
               {activeBmsBgUrl ? (
-                <img
-                  src={activeBmsBgUrl}
-                  alt=""
-                  className="home-bms-jacket-full"
-                />
+                <img src={activeBmsBgUrl} alt="" className="home-bms-jacket-full" />
               ) : (
                 <div
                   className="home-bms-jacket-full-placeholder"
                   style={{
-                    backgroundImage: activeBmsMap.cover ?? "linear-gradient(135deg, #0ea5e9, #8b5cf6)",
+                    backgroundImage:
+                      activeBmsMap.cover ?? "linear-gradient(135deg, #0ea5e9, #8b5cf6)",
                   }}
                 />
               )}
@@ -634,7 +694,9 @@ export function RecentBeatmaps({
 
               {/* Badges Flotantes sobre el Jacket */}
               <div className="home-bms-jacket-badges">
-                <span className={`home-bms-key-badge mono ${activeBmsMap.keys === 4 ? "is-4k" : "is-7k"}`}>
+                <span
+                  className={`home-bms-key-badge mono ${activeBmsMap.keys === 4 ? "is-4k" : "is-7k"}`}
+                >
                   {activeBmsMap.keys}K MODE
                 </span>
                 <span className="home-bms-bpm-badge mono">{activeBmsMap.bpm} BPM</span>
@@ -709,9 +771,8 @@ export function RecentBeatmaps({
                 <div className="home-bms-player-block">
                   <div className="home-bms-player-header">
                     <div className="home-bms-player-times mono">
-                      <span className="home-bms-time-current">
-                        {Math.floor(currentTimeSec / 60)}:
-                        {String(Math.floor(currentTimeSec % 60)).padStart(2, "0")}
+                      <span ref={timeCurrentRef} className="home-bms-time-current">
+                        0:00
                       </span>
                       <span className="home-bms-time-sep">/</span>
                       <span className="home-bms-time-total">
@@ -724,6 +785,7 @@ export function RecentBeatmaps({
 
                   {/* Barra de progreso / Scrubbing estilo YouTube con Onda de Densidad NPS */}
                   <div
+                    ref={scrubberRef}
                     className="home-bms-scrubber"
                     onClick={handleScrubberSeek}
                     onMouseMove={handleScrubberMouseMove}
@@ -732,7 +794,7 @@ export function RecentBeatmaps({
                     aria-label="Línea de tiempo de la canción"
                     aria-valuemin={0}
                     aria-valuemax={durationSec || 100}
-                    aria-valuenow={currentTimeSec}
+                    aria-valuenow={0}
                     tabIndex={0}
                   >
                     {/* Tooltip interactivo flotante al hacer hover */}
@@ -747,9 +809,7 @@ export function RecentBeatmaps({
                         </span>
                         <span className="home-bms-tooltip-sep">•</span>
                         <span className="home-bms-tooltip-nps">{hoverInfo.nps} NPS</span>
-                        {hoverInfo.isKiai && (
-                          <span className="home-bms-tooltip-kiai">KIAI</span>
-                        )}
+                        {hoverInfo.isKiai && <span className="home-bms-tooltip-kiai">KIAI</span>}
                       </div>
                     )}
 
@@ -771,39 +831,78 @@ export function RecentBeatmaps({
                         >
                           <defs>
                             {/* Relleno vertical transparente estilo YouTube (Normal) */}
-                            <linearGradient id="bmsWaveFillGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.30" />
-                              <stop offset="60%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.10" />
-                              <stop offset="100%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="0.02" />
+                            <linearGradient
+                              id="bmsWaveFillGradient"
+                              x1="0%"
+                              y1="0%"
+                              x2="0%"
+                              y2="100%"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="var(--bms-accent, #38bdf8)"
+                                stopOpacity="0.30"
+                              />
+                              <stop
+                                offset="60%"
+                                stopColor="var(--bms-accent, #38bdf8)"
+                                stopOpacity="0.10"
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="var(--bms-accent, #38bdf8)"
+                                stopOpacity="0.02"
+                              />
                             </linearGradient>
 
                             {/* Borde superior con color fuerte vibrante (Normal) */}
-                            <linearGradient id="bmsWaveStrokeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="var(--bms-accent, #38bdf8)" stopOpacity="1" />
-                              <stop offset="100%" stopColor="var(--bms-accent-edge, #818cf8)" stopOpacity="1" />
+                            <linearGradient
+                              id="bmsWaveStrokeGradient"
+                              x1="0%"
+                              y1="0%"
+                              x2="100%"
+                              y2="0%"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="var(--bms-accent, #38bdf8)"
+                                stopOpacity="1"
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="var(--bms-accent-edge, #818cf8)"
+                                stopOpacity="1"
+                              />
                             </linearGradient>
 
                             {/* Relleno vertical Ámbar / Fuego con EXACTAMENTE la misma transparencia que el color normal */}
-                            <linearGradient id="bmsWaveKiaiFillGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <linearGradient
+                              id="bmsWaveKiaiFillGradient"
+                              x1="0%"
+                              y1="0%"
+                              x2="0%"
+                              y2="100%"
+                            >
                               <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.30" />
                               <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.10" />
                               <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
                             </linearGradient>
 
                             {/* Borde superior Dorado Brillante (Kiai Time) */}
-                            <linearGradient id="bmsWaveKiaiStrokeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <linearGradient
+                              id="bmsWaveKiaiStrokeGradient"
+                              x1="0%"
+                              y1="0%"
+                              x2="100%"
+                              y2="0%"
+                            >
                               <stop offset="0%" stopColor="#fbbf24" stopOpacity="1" />
                               <stop offset="100%" stopColor="#f59e0b" stopOpacity="1" />
                             </linearGradient>
 
                             {/* Clip path según el progreso de reproducción actual */}
                             <clipPath id="bmsWaveProgressClip">
-                              <rect
-                                x="0"
-                                y="0"
-                                width={`${durationSec > 0 ? (currentTimeSec / durationSec) * 1000 : 0}`}
-                                height="20"
-                              />
+                              <rect ref={waveProgressRectRef} x="0" y="0" width="0" height="20" />
                             </clipPath>
 
                             {/* Clip path exclusivo para las zonas donde existe Kiai */}
@@ -811,7 +910,10 @@ export function RecentBeatmaps({
                               {durationSec > 0 &&
                                 kiaiIntervals.map((interval, i) => {
                                   const durationMs = durationSec * 1000;
-                                  const startX = Math.max(0, (interval.startMs / durationMs) * 1000);
+                                  const startX = Math.max(
+                                    0,
+                                    (interval.startMs / durationMs) * 1000,
+                                  );
                                   const endX = Math.min(1000, (interval.endMs / durationMs) * 1000);
                                   const rectWidth = Math.max(0, endX - startX);
                                   return (
@@ -833,8 +935,14 @@ export function RecentBeatmaps({
                                 {durationSec > 0 &&
                                   kiaiIntervals.map((interval, i) => {
                                     const durationMs = durationSec * 1000;
-                                    const startX = Math.max(0, (interval.startMs / durationMs) * 1000);
-                                    const endX = Math.min(1000, (interval.endMs / durationMs) * 1000);
+                                    const startX = Math.max(
+                                      0,
+                                      (interval.startMs / durationMs) * 1000,
+                                    );
+                                    const endX = Math.min(
+                                      1000,
+                                      (interval.endMs / durationMs) * 1000,
+                                    );
                                     const rectWidth = Math.max(0, endX - startX);
                                     return (
                                       <rect
@@ -852,14 +960,8 @@ export function RecentBeatmaps({
                           </defs>
 
                           {/* 1. Curva de fondo translúcida (sección no reproducida normal) */}
-                          <path
-                            d={svgPaths.fillPath}
-                            className="home-bms-nps-wave-bg"
-                          />
-                          <path
-                            d={svgPaths.strokePath}
-                            className="home-bms-nps-wave-bg-stroke"
-                          />
+                          <path d={svgPaths.fillPath} className="home-bms-nps-wave-bg" />
+                          <path d={svgPaths.strokePath} className="home-bms-nps-wave-bg-stroke" />
 
                           {/* 2. Zonas Kiai en la curva de fondo (solo el trazo ámbar para no sumar opacidad al cuerpo) */}
                           {kiaiIntervals.length > 0 && (
@@ -912,12 +1014,7 @@ export function RecentBeatmaps({
                     )}
 
                     <div className="home-bms-scrubber-track">
-                      <div
-                        className="home-bms-scrubber-fill"
-                        style={{
-                          width: `${durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0}%`,
-                        }}
-                      >
+                      <div ref={scrubberFillRef} className="home-bms-scrubber-fill">
                         <div className="home-bms-scrubber-thumb" />
                       </div>
                     </div>

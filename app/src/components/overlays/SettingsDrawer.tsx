@@ -15,7 +15,12 @@ import {
   Palette,
   RefreshCw,
 } from "lucide-react";
-import { formatKeyCode, SETTINGS_LIMITS, type UserSettings } from "../../lib/settings";
+import {
+  BEAT_DIVISORS,
+  formatKeyCode,
+  SETTINGS_LIMITS,
+  type UserSettings,
+} from "../../lib/settings";
 import { listOsuSkins, type SkinMetadata } from "../../lib/native";
 
 interface SettingsDrawerProps {
@@ -79,6 +84,7 @@ export function SettingsDrawer({
     hitPositionOffset = 40,
     receptorOffset = 0,
     selectedSkinPath = null,
+    beatDivisor = 1,
   } = settings;
 
   function update<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
@@ -185,11 +191,7 @@ export function SettingsDrawer({
                       ))}
                     </div>
 
-                    <button
-                      type="button"
-                      className="keybinds-edit-btn"
-                      onClick={onOpenKeybinds}
-                    >
+                    <button type="button" className="keybinds-edit-btn" onClick={onOpenKeybinds}>
                       <Keyboard size={14} />
                       <span>Configurar Keybinds</span>
                     </button>
@@ -276,7 +278,9 @@ export function SettingsDrawer({
                 <div className="settings-item">
                   <div className="settings-item-info">
                     <div className="settings-item-label-group">
-                      <span className="settings-item-label">Posición de Línea de Juicio (Hit Position)</span>
+                      <span className="settings-item-label">
+                        Posición de Línea de Juicio (Hit Position)
+                      </span>
                       <span className="settings-item-hint">
                         Altura de la línea de golpe lógica desde el borde inferior
                       </span>
@@ -297,12 +301,16 @@ export function SettingsDrawer({
                 <div className="settings-item">
                   <div className="settings-item-info">
                     <div className="settings-item-label-group">
-                      <span className="settings-item-label">Alineación de Receptores (Receptor Offset)</span>
+                      <span className="settings-item-label">
+                        Alineación de Receptores (Receptor Offset)
+                      </span>
                       <span className="settings-item-hint">
                         Desplaza verticalmente los sprites de los receptores de tu skin
                       </span>
                     </div>
-                    <span className="settings-item-value mono">{receptorOffset > 0 ? `+${receptorOffset}` : receptorOffset}px</span>
+                    <span className="settings-item-value mono">
+                      {receptorOffset > 0 ? `+${receptorOffset}` : receptorOffset}px
+                    </span>
                   </div>
                   <div className="settings-slider-wrapper">
                     <input
@@ -325,6 +333,27 @@ export function SettingsDrawer({
                       </button>
                     )}
                   </div>
+                </div>
+
+                <div className="settings-item settings-item--row">
+                  <div className="settings-item-label-group">
+                    <span className="settings-item-label">Divisor de líneas guía (editor)</span>
+                    <span className="settings-item-hint">
+                      Líneas por beat en la preview del editor (1/1 = beats y medidas)
+                    </span>
+                  </div>
+                  <select
+                    className="settings-select"
+                    value={beatDivisor}
+                    onChange={(e) => update("beatDivisor", Number(e.target.value))}
+                    aria-label="Divisor de líneas guía"
+                  >
+                    {BEAT_DIVISORS.map((divisor) => (
+                      <option key={divisor} value={divisor}>
+                        {divisor === 1 ? "1/1" : `1/${divisor}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="settings-item settings-item--row">
@@ -376,7 +405,9 @@ export function SettingsDrawer({
                 <div className="settings-item">
                   <div className="settings-item-info">
                     <span className="settings-item-label">Velocidad de Scroll</span>
-                    <span className="settings-item-value mono">{(scrollSpeed / 10).toFixed(1)}x</span>
+                    <span className="settings-item-value mono">
+                      {(scrollSpeed / 10).toFixed(1)}x
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -600,7 +631,10 @@ export function SettingsDrawer({
                     onWheel={(e) => {
                       const dir = e.deltaY < 0 ? 1 : -1;
                       let next = volume + dir * 5;
-                      next = Math.max(SETTINGS_LIMITS.volume.min, Math.min(SETTINGS_LIMITS.volume.max, next));
+                      next = Math.max(
+                        SETTINGS_LIMITS.volume.min,
+                        Math.min(SETTINGS_LIMITS.volume.max, next),
+                      );
                       update("volume", next);
                     }}
                     className="settings-slider"
@@ -639,9 +673,13 @@ export function SettingsDrawer({
                       onChange={(e) => update("hitsoundVolume", Number(e.target.value))}
                       onWheel={(e) => {
                         const dir = e.deltaY < 0 ? 1 : -1;
-                        const current = settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default;
+                        const current =
+                          settings.hitsoundVolume ?? SETTINGS_LIMITS.hitsoundVolume.default;
                         let next = current + dir * 5;
-                        next = Math.max(SETTINGS_LIMITS.hitsoundVolume.min, Math.min(SETTINGS_LIMITS.hitsoundVolume.max, next));
+                        next = Math.max(
+                          SETTINGS_LIMITS.hitsoundVolume.min,
+                          Math.min(SETTINGS_LIMITS.hitsoundVolume.max, next),
+                        );
                         update("hitsoundVolume", next);
                       }}
                       className="settings-slider"

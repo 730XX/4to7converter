@@ -10,6 +10,7 @@ import {
 import type { HitErrorEvent, JudgementEvent } from "./play-engine";
 import { HIT_WINDOW_MS } from "./play-engine";
 import type { SpeedTimeline } from "./speed-timeline";
+import { getBeatLinesInRange, type TimingSectionInfo } from "./beat-grid";
 
 /** Espacio vacío en la parte superior del playfield donde aparecen las notas. */
 export const PLAYFIELD_TOP_PADDING = 60;
@@ -34,15 +35,15 @@ export const RENDER_CONFIG = {
       /** Opacidad global de la LN mientras cae hacia la línea */
       fallingAlpha: 0.75,
       /** Opacidad global de la LN mientras está siendo pulsada/sostenida */
-      holdingAlpha: 0.80,
+      holdingAlpha: 0.8,
       /** Opacidad global de la LN una vez que ya pasó su cola */
       passedAlpha: 0.0,
       /** Opacidad del relleno del cuerpo mientras se pulsa (0.0 a 1.0) */
-      holdingBodyOpacity: 0.50,
+      holdingBodyOpacity: 0.5,
       /** Opacidad del contorno lateral del cuerpo mientras se pulsa (0.0 a 1.0) */
-      holdingBorderOpacity: 0.60,
+      holdingBorderOpacity: 0.6,
       /** Opacidad de la línea de la cola mientras se pulsa (0.0 a 1.0) */
-      holdingTailOpacity: 0.70,
+      holdingTailOpacity: 0.7,
     },
   },
   hitLine: {
@@ -145,8 +146,8 @@ export function buildPlayfieldPalette(keyCount: number): PlayfieldPalette {
 }
 
 /**
- * Cache centralizado para gradientes de Canvas. 
- * Reduce masivamente la presión del Garbage Collector evitando 
+ * Cache centralizado para gradientes de Canvas.
+ * Reduce masivamente la presión del Garbage Collector evitando
  * la creación de objetos CanvasGradient en cada frame.
  */
 const gradientCache = new Map<string, CanvasGradient>();
@@ -215,6 +216,12 @@ export interface PlayfieldFrameOptions {
   receptorOffset?: number;
   customSkinTextures?: LoadedSkinTextures | null;
   speedTimeline?: SpeedTimeline;
+  /** Secciones de BPM para dibujar las líneas guía del editor. */
+  timingSections?: readonly TimingSectionInfo[];
+  /** Líneas guía por beat (1 = beats/medidas, 4 = 1/4, etc.). */
+  beatDivisor?: number;
+  /** Nota fantasma que sigue el arrastre en el editor (solo vista previa). */
+  dragGhost?: { index: number; column: number; timeMs: number; endTimeMs: number | null } | null;
 }
 
 /**
@@ -255,6 +262,14 @@ export function drawPlayfieldFrame(
   let receptorOffset = 0;
   let customSkinTextures: LoadedSkinTextures | null = null;
   let speedTimeline: SpeedTimeline | undefined;
+  let timingSections: readonly TimingSectionInfo[] | undefined;
+  let beatDivisor = 1;
+  let dragGhost: {
+    index: number;
+    column: number;
+    timeMs: number;
+    endTimeMs: number | null;
+  } | null = null;
 
   if (typeof options === "object") {
     approachMs = options.approachMs ?? PLAYFIELD_APPROACH_MS;
@@ -278,17 +293,18 @@ export function drawPlayfieldFrame(
     receptorOffset = options.receptorOffset ?? 0;
     customSkinTextures = options.customSkinTextures ?? null;
     speedTimeline = options.speedTimeline;
+    timingSections = options.timingSections;
+    beatDivisor = options.beatDivisor ?? 1;
+    dragGhost = options.dragGhost ?? null;
   } else if (typeof options === "number") {
     approachMs = options;
   }
 
   const comboPositionPercent =
-    typeof options === "object" ? options.comboPositionPercent ?? 55 : 55;
-  const debugHitWindows =
-    typeof options === "object" ? options.debugHitWindows ?? false : false;
+    typeof options === "object" ? (options.comboPositionPercent ?? 55) : 55;
+  const debugHitWindows = typeof options === "object" ? (options.debugHitWindows ?? false) : false;
 
-  const hitLineY =
-    dir === "down" ? height - hitPositionOffset : hitPositionOffset;
+  const hitLineY = dir === "down" ? height - hitPositionOffset : hitPositionOffset;
 
   const metrics: PlayfieldMetrics = {
     width,
@@ -303,16 +319,14 @@ export function drawPlayfieldFrame(
     drawLanes(ctx, width, height, keyCount, palette);
   }
 
+  // Líneas guía (medidas/beats/subdivisiones) por debajo de las notas. Solo se
+  // dibujan cuando el editor pasa las secciones de timing.
+  if (timingSections && timingSections.length > 0) {
+    drawBeatLines(ctx, metrics, currentTimeMs, dir, timingSections, beatDivisor, speedTimeline);
+  }
+
   if (debugHitWindows) {
-    drawDebugHitWindows(
-      ctx,
-      hitObjects,
-      currentTimeMs,
-      metrics,
-      keyCount,
-      dir,
-      hitNoteIndices,
-    );
+    drawDebugHitWindows(ctx, hitObjects, currentTimeMs, metrics, keyCount, dir, hitNoteIndices);
   }
 
   drawHitBeams(
@@ -343,6 +357,7 @@ export function drawPlayfieldFrame(
     noteHeight,
     customSkinTextures,
     speedTimeline,
+    dragGhost?.index ?? -1,
   );
   drawHitLine(
     ctx,
@@ -355,6 +370,22 @@ export function drawPlayfieldFrame(
     customSkinTextures,
     receptorOffset,
   );
+
+  // Nota fantasma del arrastre en el editor, por encima de las notas reales.
+  if (dragGhost !== null) {
+    drawDragGhost(
+      ctx,
+      width,
+      keyCount,
+      metrics,
+      dir,
+      noteHeight,
+      currentTimeMs,
+      dragGhost,
+      customSkinTextures,
+      speedTimeline,
+    );
+  }
 
   if (isPlayMode) {
     drawComboHud(
@@ -373,13 +404,7 @@ export function drawPlayfieldFrame(
     }
 
     if (showHitError && recentHitErrors && recentHitErrors.length > 0) {
-      drawHitErrorBar(
-        ctx,
-        width,
-        height,
-        recentHitErrors,
-        comboPositionPercent,
-      );
+      drawHitErrorBar(ctx, width, height, recentHitErrors, comboPositionPercent);
     }
 
     if (isCompleted) {
@@ -455,7 +480,7 @@ function drawHitBeams(
 
         ctx.save();
         ctx.translate(colX + 1, hitLineY);
-        
+
         ctx.fillStyle = getBeamGradient(ctx, skin, BEAM_HEIGHT, 1.0, scrollDirection);
         ctx.fillRect(
           0,
@@ -463,24 +488,30 @@ function drawHitBeams(
           actualWidth - 1,
           BEAM_HEIGHT,
         );
-        
+
         ctx.restore();
       }
     }
   } else {
-    const ATTACK_MS = 50; 
-    const DECAY_MS = 250; 
+    const ATTACK_MS = 50;
+    const DECAY_MS = 250;
 
     // Aquí también usamos búsqueda binaria para no iterar el mapa completo.
     // La ventana de efecto de luz es muy pequeña (-50ms a +250ms).
     // Podemos crear una métrica temporal para findFirstVisibleNoteIndex
     const fakeMetrics = { approachMs: 250, hitLineY, width, height, topPadding: 0 };
-    const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, fakeMetrics, scrollDirection, speedTimeline);
+    const startIndex = findFirstVisibleNoteIndex(
+      hitObjects,
+      currentTimeMs,
+      fakeMetrics,
+      scrollDirection,
+      speedTimeline,
+    );
 
     for (let i = startIndex; i < hitObjects.length; i++) {
       const ho = hitObjects[i];
       if (!ho) continue;
-      
+
       // Si la nota está muy en el futuro, rompemos el bucle
       if (ho.timeMs > currentTimeMs + DECAY_MS) {
         break;
@@ -513,7 +544,7 @@ function drawHitBeams(
         if (intensity > 0.01) {
           ctx.save();
           ctx.translate(colX + 1, hitLineY);
-          
+
           ctx.fillStyle = getBeamGradient(ctx, skin, BEAM_HEIGHT, intensity, scrollDirection);
           ctx.fillRect(
             0,
@@ -521,7 +552,7 @@ function drawHitBeams(
             actualWidth - 1,
             BEAM_HEIGHT,
           );
-          
+
           ctx.restore();
         }
       }
@@ -548,7 +579,7 @@ function drawHitLine(
     for (let col = 0; col < keyCount; col++) {
       const isPressed = userActiveLanes ? !!userActiveLanes[col] : false;
       const keyImg = isPressed
-        ? customSkinTextures.keyImagesD[col] ?? customSkinTextures.keyImages[col]
+        ? (customSkinTextures.keyImagesD[col] ?? customSkinTextures.keyImages[col])
         : customSkinTextures.keyImages[col];
 
       const colX = Math.round(col * columnWidth);
@@ -584,6 +615,71 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
 }
 
+/**
+ * Color de cada línea guía según su nivel de subdivisión (denominador de la
+ * fracción de beat): 1/1 blanco, 1/2 rojo, 1/4 azul, 1/8 amarillo, tresillos verde.
+ */
+const BEAT_LEVEL_COLORS: Record<number, string> = {
+  1: "rgba(255, 255, 255, 0.55)",
+  2: "rgba(255, 92, 92, 0.6)",
+  4: "rgba(96, 156, 255, 0.6)",
+  8: "rgba(250, 204, 21, 0.55)",
+  3: "rgba(74, 222, 128, 0.55)",
+  6: "rgba(251, 146, 60, 0.55)",
+  16: "rgba(192, 132, 252, 0.5)",
+};
+const DEFAULT_BEAT_LINE_COLOR = "rgba(255, 255, 255, 0.22)";
+
+/**
+ * Pinta las líneas guía horizontales usando la misma proyección que las notas,
+ * por lo que respetan BPM y SV. Se dibujan por debajo de las notas.
+ */
+function drawBeatLines(
+  ctx: CanvasRenderingContext2D,
+  metrics: PlayfieldMetrics,
+  currentTimeMs: number,
+  scrollDirection: "down" | "up",
+  timingSections: readonly TimingSectionInfo[],
+  beatDivisor: number,
+  speedTimeline?: SpeedTimeline,
+): void {
+  const speedPxPerMs =
+    scrollDirection === "down"
+      ? (metrics.hitLineY - metrics.topPadding) / metrics.approachMs
+      : (metrics.height - metrics.topPadding - metrics.hitLineY) / metrics.approachMs;
+
+  // Ventana generosa: el filtrado real se hace por posición vertical.
+  const windowMs = metrics.approachMs * 3 + 2000;
+  const lines = getBeatLinesInRange(
+    timingSections,
+    currentTimeMs - windowMs,
+    currentTimeMs + windowMs,
+    beatDivisor,
+  );
+
+  ctx.save();
+  for (const line of lines) {
+    const y = getNoteY(
+      line.timeMs,
+      currentTimeMs,
+      metrics.hitLineY,
+      speedPxPerMs,
+      scrollDirection,
+      speedTimeline,
+    );
+    if (y < -4 || y > metrics.height + 4) continue;
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = BEAT_LEVEL_COLORS[line.level] ?? DEFAULT_BEAT_LINE_COLOR;
+
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(metrics.width, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Pinta las notas visibles con gradientes estilo metal / arcade. */
 function drawNotes(
   ctx: CanvasRenderingContext2D,
@@ -599,6 +695,7 @@ function drawNotes(
   noteHeight: number = 16,
   customSkinTextures: LoadedSkinTextures | null = null,
   speedTimeline?: SpeedTimeline,
+  skipNoteIndex: number = -1,
 ): void {
   const speedPxPerMs =
     scrollDirection === "down"
@@ -611,11 +708,22 @@ function drawNotes(
   const topBound = 0;
   const bottomBound = metrics.height;
 
-  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection, speedTimeline);
+  const startIndex = findFirstVisibleNoteIndex(
+    hitObjects,
+    currentTimeMs,
+    metrics,
+    scrollDirection,
+    speedTimeline,
+  );
 
   for (let i = startIndex; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
     if (!hitObject) {
+      continue;
+    }
+
+    // La nota que se está arrastrando se oculta: el ghost la representa.
+    if (i === skipNoteIndex) {
       continue;
     }
 
@@ -665,14 +773,23 @@ function drawNotes(
         : RENDER_CONFIG.notes.rice.fallingAlpha;
 
       if (customNoteImg && customNoteImg.complete && customNoteImg.naturalWidth > 0) {
-        drawCustomNoteImage(ctx, customNoteImg, centerX, noteY, noteWidth, noteHeight, scrollDirection);
+        drawCustomNoteImage(
+          ctx,
+          customNoteImg,
+          centerX,
+          noteY,
+          noteWidth,
+          noteHeight,
+          scrollDirection,
+        );
       } else {
         drawNoteBar(ctx, centerX, noteY, noteWidth, skin, noteHeight, scrollDirection);
       }
     } else {
       const isUserHolding = isPlayMode && holdingLnIndices != null && holdingLnIndices.has(i);
       const isFalling = currentTimeMs < hitObject.timeMs;
-      const isHolding = isUserHolding ||
+      const isHolding =
+        isUserHolding ||
         (currentTimeMs >= hitObject.timeMs && currentTimeMs <= hitObject.endTimeMs);
 
       ctx.globalAlpha = isHolding
@@ -701,6 +818,106 @@ function drawNotes(
   ctx.globalAlpha = 1;
 }
 
+/** Skin sintética holograma (violeta) para la nota fantasma del arrastre. */
+const GHOST_SKIN: LaneSkinColor = {
+  top: "#e9d5ff",
+  mid: "#a855f7",
+  bot: "#7c3aed",
+  border: "rgba(233, 213, 255, 0.85)",
+  holdBody: "rgba(168, 85, 247, 0.45)",
+};
+
+/** Tinte holograma (violeta) que se aplica sobre el asset de la skin al arrastrar. */
+const HOLOGRAM_TINT = "rgba(168, 85, 247, 0.6)";
+
+/**
+ * Dibuja la nota fantasma que sigue al puntero durante un arrastre en el editor.
+ * Usa la misma geometría que una nota real para que el ajuste al beat sea visible.
+ */
+function drawDragGhost(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  keyCount: number,
+  metrics: PlayfieldMetrics,
+  scrollDirection: "down" | "up",
+  noteHeight: number,
+  currentTimeMs: number,
+  ghost: { column: number; timeMs: number; endTimeMs: number | null },
+  customSkinTextures: LoadedSkinTextures | null,
+  speedTimeline?: SpeedTimeline,
+): void {
+  const speedPxPerMs =
+    scrollDirection === "down"
+      ? (metrics.hitLineY - metrics.topPadding) / metrics.approachMs
+      : (metrics.height - metrics.topPadding - metrics.hitLineY) / metrics.approachMs;
+
+  const columnIndex = Math.max(0, Math.min(keyCount - 1, ghost.column));
+  const centerX = getColumnCenterX(columnIndex, keyCount, width);
+  const noteWidth = Math.max(width / keyCount - 2, 2);
+  const noteY = getNoteY(
+    ghost.timeMs,
+    currentTimeMs,
+    metrics.hitLineY,
+    speedPxPerMs,
+    scrollDirection,
+    speedTimeline,
+  );
+
+  const customNoteImg = customSkinTextures?.noteImages[columnIndex] ?? null;
+
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  if (ghost.endTimeMs === null) {
+    if (customNoteImg && customNoteImg.complete && customNoteImg.naturalWidth > 0) {
+      drawHologramNoteImage(
+        ctx,
+        customNoteImg,
+        centerX,
+        noteY,
+        noteWidth,
+        noteHeight,
+        scrollDirection,
+      );
+    } else {
+      drawNoteBar(ctx, centerX, noteY, noteWidth, GHOST_SKIN, noteHeight, scrollDirection);
+    }
+  } else {
+    const endY = getHoldEndY(
+      ghost.endTimeMs,
+      currentTimeMs,
+      metrics.hitLineY,
+      speedPxPerMs,
+      scrollDirection,
+      speedTimeline,
+    );
+    drawHoldNoteWithSkin(
+      ctx,
+      centerX,
+      noteY,
+      endY,
+      noteWidth,
+      GHOST_SKIN,
+      false,
+      noteHeight,
+      scrollDirection,
+      null,
+      null,
+      null,
+    );
+  }
+  ctx.restore();
+
+  // Línea guía sutil en el Y ajustado para confirmar el snap al beat.
+  ctx.save();
+  ctx.strokeStyle = "rgba(125, 211, 252, 0.45)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, Math.round(noteY) + 0.5);
+  ctx.lineTo(width, Math.round(noteY) + 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawCustomNoteImage(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -715,6 +932,53 @@ function drawCustomNoteImage(
   const calculatedHeight = Math.max(noteHeight, Math.round(width * aspect));
   const topY = scrollDirection === "down" ? Math.round(y - calculatedHeight) : Math.round(y);
   ctx.drawImage(img, x, topY, width, calculatedHeight);
+}
+
+/** Canvas offscreen reutilizable para teñir el asset del ghost sin tocar el fondo. */
+let hologramScratchCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Dibuja el asset de la skin de la nota fantasma con un tinte holograma, para
+ * distinguirla de las notas reales mientras se arrastra en el editor.
+ */
+function drawHologramNoteImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  centerX: number,
+  y: number,
+  width: number,
+  noteHeight: number,
+  scrollDirection: "down" | "up",
+): void {
+  const aspect = img.naturalHeight / img.naturalWidth;
+  const calculatedHeight = Math.max(noteHeight, Math.round(width * aspect));
+  const x = Math.round(centerX - width / 2);
+  const topY = scrollDirection === "down" ? Math.round(y - calculatedHeight) : Math.round(y);
+
+  // Se tiñe en un canvas offscreen para que el `source-atop` afecte solo a los
+  // píxeles del asset y no al fondo del playfield.
+  if (hologramScratchCanvas === null) {
+    hologramScratchCanvas = document.createElement("canvas");
+  }
+  const scratch = hologramScratchCanvas;
+  if (scratch.width !== width || scratch.height !== calculatedHeight) {
+    scratch.width = width;
+    scratch.height = calculatedHeight;
+  }
+  const scratchCtx = scratch.getContext("2d");
+  if (scratchCtx === null) {
+    ctx.drawImage(img, x, topY, width, calculatedHeight);
+    return;
+  }
+
+  scratchCtx.globalCompositeOperation = "source-over";
+  scratchCtx.clearRect(0, 0, width, calculatedHeight);
+  scratchCtx.drawImage(img, 0, 0, width, calculatedHeight);
+  scratchCtx.globalCompositeOperation = "source-atop";
+  scratchCtx.fillStyle = HOLOGRAM_TINT;
+  scratchCtx.fillRect(0, 0, width, calculatedHeight);
+
+  ctx.drawImage(scratch, x, topY, width, calculatedHeight);
 }
 
 function drawHoldNoteWithSkin(
@@ -740,7 +1004,9 @@ function drawHoldNoteWithSkin(
   // En osu! mania, el cuerpo de la LN se extiende desde la cola hasta el centro geométrico de la cabeza.
   // La cabeza se renderiza por encima tapando el cuerpo.
   const headCenterY = isCustomHead
-    ? (scrollDirection === "down" ? headY - headCalculatedHeight / 2 : headY + headCalculatedHeight / 2)
+    ? scrollDirection === "down"
+      ? headY - headCalculatedHeight / 2
+      : headY + headCalculatedHeight / 2
     : headY;
 
   const headBodyEdgeY = headCenterY;
@@ -750,9 +1016,7 @@ function drawHoldNoteWithSkin(
   const tailCalculatedHeight = isCustomTail
     ? Math.max(noteHeight, Math.round(noteWidth * tailAspect))
     : 2;
-  const tailBodyEdgeY = isCustomTail
-    ? (scrollDirection === "down" ? tailY : tailY)
-    : tailY;
+  const tailBodyEdgeY = isCustomTail ? (scrollDirection === "down" ? tailY : tailY) : tailY;
 
   // El cuerpo conecta limpiamente entre la cola y la cabeza
   const bodyTop = Math.min(headBodyEdgeY, tailBodyEdgeY);
@@ -946,11 +1210,26 @@ function drawJudgement(
   const label = judgement.tier;
 
   switch (judgement.tier) {
-    case "MAX": textColor = "#38bdf8"; glowColor = "rgba(56, 189, 248, 0.85)"; break;
-    case "PERFECT": textColor = "#fbbf24"; glowColor = "rgba(251, 191, 36, 0.85)"; break;
-    case "GREAT": textColor = "#34d399"; glowColor = "rgba(52, 211, 153, 0.75)"; break;
-    case "GOOD": textColor = "#818cf8"; glowColor = "rgba(129, 140, 248, 0.75)"; break;
-    case "MISS": textColor = "#f43f5e"; glowColor = "rgba(244, 63, 94, 0.75)"; break;
+    case "MAX":
+      textColor = "#38bdf8";
+      glowColor = "rgba(56, 189, 248, 0.85)";
+      break;
+    case "PERFECT":
+      textColor = "#fbbf24";
+      glowColor = "rgba(251, 191, 36, 0.85)";
+      break;
+    case "GREAT":
+      textColor = "#34d399";
+      glowColor = "rgba(52, 211, 153, 0.75)";
+      break;
+    case "GOOD":
+      textColor = "#818cf8";
+      glowColor = "rgba(129, 140, 248, 0.75)";
+      break;
+    case "MISS":
+      textColor = "#f43f5e";
+      glowColor = "rgba(244, 63, 94, 0.75)";
+      break;
   }
 
   ctx.shadowColor = glowColor;
@@ -1125,7 +1404,7 @@ function drawNoteBar(
   // Borde fino inferior de sombra
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
   ctx.fillRect(0, noteHeight - 2, noteWidth, 2);
-  
+
   ctx.restore();
 }
 
@@ -1166,7 +1445,7 @@ function drawDebugHitWindows(
     if (!note) {
       continue;
     }
-    
+
     // Si la nota está muy en el futuro, no será visible
     if (note.timeMs > currentTimeMs + metrics.approachMs + HIT_WINDOW_MS + 2000) {
       break;
@@ -1179,8 +1458,20 @@ function drawDebugHitWindows(
     const earlyTime = note.timeMs - HIT_WINDOW_MS;
     const lateTime = note.timeMs + HIT_WINDOW_MS;
 
-    const yEarly = getNoteY(earlyTime, currentTimeMs, metrics.hitLineY, speedPxPerMs, scrollDirection);
-    const yLate = getNoteY(lateTime, currentTimeMs, metrics.hitLineY, speedPxPerMs, scrollDirection);
+    const yEarly = getNoteY(
+      earlyTime,
+      currentTimeMs,
+      metrics.hitLineY,
+      speedPxPerMs,
+      scrollDirection,
+    );
+    const yLate = getNoteY(
+      lateTime,
+      currentTimeMs,
+      metrics.hitLineY,
+      speedPxPerMs,
+      scrollDirection,
+    );
 
     const top = Math.min(yEarly, yLate);
     const bottom = Math.max(yEarly, yLate);

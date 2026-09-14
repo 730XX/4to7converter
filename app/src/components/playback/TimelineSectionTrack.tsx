@@ -1,7 +1,8 @@
 import React, { useRef, useState } from "react";
-import { Scissors, Trash2 } from "lucide-react";
+import { Minus, Plus, Scissors, Trash2 } from "lucide-react";
 import type { UiTimelineSection } from "../../lib/timeline-sections";
 import { formatTimeMs } from "../../preview/preview-math";
+import { BEAT_DIVISORS } from "../../lib/settings";
 
 interface TimelineSectionTrackProps {
   sections: readonly UiTimelineSection[];
@@ -13,6 +14,8 @@ interface TimelineSectionTrackProps {
   onDeleteSection: (sectionId: string) => void;
   onSeek: (timeMs: number) => void;
   onUpdateBoundary?: (leftSectionIndex: number, newCutTimeMs: number) => void;
+  beatDivisor?: number;
+  onChangeDivisor?: (divisor: number) => void;
 }
 
 /**
@@ -27,9 +30,15 @@ export function TimelineSectionTrack({
   onDeleteSection,
   onSeek,
   onUpdateBoundary,
+  beatDivisor = 1,
+  onChangeDivisor,
 }: TimelineSectionTrackProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [draggingHandleIndex, setDraggingHandleIndex] = useState<number | null>(null);
+
+  const divisorIndex = Math.max(0, (BEAT_DIVISORS as readonly number[]).indexOf(beatDivisor));
+  const canDecreaseDivisor = divisorIndex > 0;
+  const canIncreaseDivisor = divisorIndex < BEAT_DIVISORS.length - 1;
 
   if (durationMs <= 0) {
     return null;
@@ -87,6 +96,31 @@ export function TimelineSectionTrack({
           </span>
         </div>
         <div className="timeline-sections-actions">
+          <div className="timeline-divisor-control" title="Divisor de las líneas guía del editor">
+            <button
+              type="button"
+              className="timeline-divisor-btn"
+              onClick={() => onChangeDivisor?.(BEAT_DIVISORS[divisorIndex - 1] ?? beatDivisor)}
+              disabled={!canDecreaseDivisor}
+              title="Menos subdivisiones"
+              aria-label="Menos subdivisiones"
+            >
+              <Minus size={12} />
+            </button>
+            <span className="timeline-divisor-value mono">
+              {beatDivisor === 1 ? "1/1" : `1/${beatDivisor}`}
+            </span>
+            <button
+              type="button"
+              className="timeline-divisor-btn"
+              onClick={() => onChangeDivisor?.(BEAT_DIVISORS[divisorIndex + 1] ?? beatDivisor)}
+              disabled={!canIncreaseDivisor}
+              title="Más subdivisiones (máx 1/8)"
+              aria-label="Más subdivisiones"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
           <button
             type="button"
             className="timeline-split-btn"
@@ -109,8 +143,7 @@ export function TimelineSectionTrack({
         {effectiveSections.map((sec) => {
           const isSelected = activeSectionId === sec.id;
           const leftPercent = (Math.max(0, sec.startMs) / durationMs) * 100;
-          const widthPercent =
-            (Math.max(1, sec.endMs - sec.startMs) / durationMs) * 100;
+          const widthPercent = (Math.max(1, sec.endMs - sec.startMs) / durationMs) * 100;
           const color = sec.color ?? "#38bdf8";
 
           return (
@@ -132,12 +165,13 @@ export function TimelineSectionTrack({
             >
               <div className="timeline-section-bar-top" style={{ backgroundColor: color }} />
               <div className="timeline-section-content">
-                <span className="timeline-section-name" style={{ color: isSelected ? "#fff" : color }}>
+                <span
+                  className="timeline-section-name"
+                  style={{ color: isSelected ? "#fff" : color }}
+                >
                   {sec.name}
                 </span>
-                <span className="timeline-section-timerange mono">
-                  {formatTimeMs(sec.startMs)}
-                </span>
+                <span className="timeline-section-timerange mono">{formatTimeMs(sec.startMs)}</span>
               </div>
 
               {effectiveSections.length > 1 && (

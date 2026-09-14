@@ -107,7 +107,13 @@ export function getVisibleHitObjects(
   const bottomBound = metrics.height + VISIBILITY_MARGIN;
   const visible: HitObject[] = [];
 
-  const startIndex = findFirstVisibleNoteIndex(hitObjects, currentTimeMs, metrics, scrollDirection, speedTimeline);
+  const startIndex = findFirstVisibleNoteIndex(
+    hitObjects,
+    currentTimeMs,
+    metrics,
+    scrollDirection,
+    speedTimeline,
+  );
 
   for (let i = startIndex; i < hitObjects.length; i++) {
     const hitObject = hitObjects[i];
@@ -193,7 +199,8 @@ export function findFirstVisibleNoteIndex(
 
     // Usar el mayor entre timeMs y endTimeMs para LNs cuya cola todavía podría
     // estar visible aunque su cabeza ya haya pasado hace mucho.
-    const noteEndTime = note.endTimeMs !== null ? Math.max(note.timeMs, note.endTimeMs) : note.timeMs;
+    const noteEndTime =
+      note.endTimeMs !== null ? Math.max(note.timeMs, note.endTimeMs) : note.timeMs;
 
     if (noteEndTime >= targetTime) {
       result = mid;
@@ -218,6 +225,52 @@ export function findFirstVisibleNoteIndex(
 export function getColumnCenterX(column: number, keyCount: number, playfieldWidth: number): number {
   const columnWidth = playfieldWidth / keyCount;
   return columnWidth * column + columnWidth / 2;
+}
+
+/**
+ * Devuelve el índice de columna que contiene una coordenada X, recortado a los
+ * límites válidos del playfield.
+ *
+ * @param x - Coordenada X en píxeles dentro del playfield.
+ * @param width - Ancho del playfield en píxeles.
+ * @param keyCount - Cantidad de columnas del beatmap.
+ * @returns El índice de columna basado en cero.
+ */
+export function columnFromX(x: number, width: number, keyCount: number): number {
+  if (keyCount <= 0) return 0;
+  const columnWidth = width / keyCount;
+  if (!(columnWidth > 0)) return 0;
+  return Math.max(0, Math.min(keyCount - 1, Math.floor(x / columnWidth)));
+}
+
+/**
+ * Invierte la proyección vertical: dado un Y en pantalla, devuelve el tiempo de
+ * impacto de la nota que se dibujaría en esa posición. Es la inversa de
+ * `getNoteY`/`getHoldEndY` y respeta la línea temporal de velocidad si existe.
+ *
+ * @param y - Coordenada Y en píxeles dentro del playfield.
+ * @param currentTimeMs - Tiempo actual del reloj maestro en milisegundos.
+ * @param hitLineY - Coordenada Y de la línea de golpe.
+ * @param speedPxPerMs - Velocidad de desplazamiento en píxeles por milisegundo.
+ * @param scrollDirection - Dirección de desplazamiento del playfield.
+ * @param speedTimeline - Línea temporal de velocidad opcional.
+ * @returns El tiempo de impacto en milisegundos.
+ */
+export function timeAtY(
+  y: number,
+  currentTimeMs: number,
+  hitLineY: number,
+  speedPxPerMs: number,
+  scrollDirection: "down" | "up" = "down",
+  speedTimeline?: SpeedTimeline,
+): number {
+  if (!(speedPxPerMs > 0)) return currentTimeMs;
+  const distance =
+    scrollDirection === "down" ? (hitLineY - y) / speedPxPerMs : (y - hitLineY) / speedPxPerMs;
+  if (speedTimeline) {
+    return speedTimeline.timeAtDistance(currentTimeMs, distance);
+  }
+  return currentTimeMs + distance;
 }
 
 /**
